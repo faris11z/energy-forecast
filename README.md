@@ -13,8 +13,12 @@ time only, never random.
 | model | MAE (MW) | RMSE (MW) | MAPE (%) |
 |-------|---------:|----------:|---------:|
 | baseline: load from the same hour one week earlier | 1,860.29 | 2,322.99 | 3.45 |
-| **LightGBM (10 features)** | **1,529.96** | **2,006.93** | **2.81** |
-| improvement | **-17.8%** | **-13.6%** | **-18.6%** |
+| **LightGBM (10 features)** | **1,438.54** | **1,888.55** | **2.64** |
+| improvement | **-22.7%** | **-18.7%** | **-23.5%** |
+
+Trained on 2 years (17,518 rows). More history was not cosmetic: the drift monitor
+compares the last 30 days against the same 30 days a year earlier, which is
+impossible with only one year of data.
 
 The baseline is the yardstick: a model that cannot beat "the same hour last week" is
 not worth deploying.
@@ -110,7 +114,7 @@ dvc repro                 # ingest -> features -> train -> evaluate
 python src\promote.py     # registry + 1% gate
 python src\monitor.py     # reports/drift.html + reports/drift.json
 python app\api.py         # http://localhost:8000
-pytest -q                 # offline, no external calls
+pytest -q                 # 6 tests, offline, no external calls
 dvc dag                   # the graph above, from the real pipeline
 ```
 
@@ -118,9 +122,12 @@ dvc dag                   # the graph above, from the real pipeline
 
 - `params.yaml` is a whole-file DVC dep, so any param change reruns every stage
   including the network download. `dvc repro -s <stage>` is the workaround.
-- Drift currently compares 30 days against the **whole** training set, so a seasonal
-  shift reads as drift and the alert fires every September. The reference should be
-  the same 30 days last year.
+- `drift_detected` follows **accuracy**, not distribution. September 2026 really was
+  warmer than September 2025 and the model absorbed it (+0.5% MAE), so paging on the
+  distribution shift would be noise. `distribution_drift` is reported alongside it.
+- The seasonal reference needs `data.ingest_days >= 730`. With a single year of
+  history the monitor falls back to the training set and sets `seasonally_matched:
+  false` rather than reporting a meaningless number.
 - `dvc push`, the retrain workflow and the Space deploy were never executed against
   a real remote; they are syntax-checked only.
 

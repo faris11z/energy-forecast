@@ -15,6 +15,12 @@ on:
 jobs:
   retrain:
     runs-on: ubuntu-latest
+    env:
+      # Set for the whole job, not per step, so every python call agrees on where
+      # the registry is. common.tracking_uri() reads MLFLOW_TRACKING_URI and falls
+      # back to the local ./mlruns store when it is empty.
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,56 +31,78 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt dvc
 
-      # DagsHub credentials live in repository secrets, never in the repo. MLFLOW_
-      # TRACKING_URI is read by common.tracking_uri(), so the same code runs locally
-      # against ./mlruns and here against the remote store.
-      - name: Configure DagsHub credentials
+      # The DVC remote is a local config file, and a fresh checkout does not have
+      # the credentials to use one. This step is what actually points DVC at
+      # DagsHub; without it `dvc pull` finds no remote and the pipeline silently
+      # re-downloads from the public APIs instead of using versioned data.
+      - name: Configure the DVC remote
         env:
+          DAGSHUB_REMOTE_URL: ${{ secrets.DAGSHUB_REMOTE_URL }}
           DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          if [ -n "$DAGSHUB_TOKEN" ]; then
-            echo "using DagsHub tracking at $MLFLOW_TRACKING_URI"
-          else
-            echo "DAGSHUB_TOKEN is not set, falling back to the local ./mlruns store"
+          if [ -z "$DAGSHUB_REMOTE_URL" ]; then
+            echo "::warning::DAGSHUB_REMOTE_URL is not set. dvc push/pull are disabled;"
+            echo "the ingest stage will download fresh data from the public APIs."
+            exit 0
           fi
+          dvc remote remove origin 2>/dev/null || true
+          # No token in the URL: .dvc/config is committed, and GitHub Actions
+          # credentials come from the environment instead.
+          dvc remote add -d origin "$DAGSHUB_REMOTE_URL"
+          dvc remote list
 
-      # Graceful: the first run has no remote data yet, and that must not fail the job.
       - name: Pull versioned data
         continue-on-error: true
         run: |
-          dvc remote list || echo "no DVC remote configured, using the data already in the image"
-          dvc pull -q || echo "dvc pull skipped, continuing"
+          if dvc remote list | grep -q origin; then
+            dvc pull -q || echo "::warning::dvc pull failed, continuing with a fresh ingest"
+          else
+            echo "no DVC remote, the ingest stage will download fresh data"
+          fi
 
       - name: Ingest, features, train, evaluate
         run: dvc repro -f
 
+      # Log the baseline and the model run, so the remote registry holds the
+      # experiment history and not just promotion candidates.
+      - name: Log runs to MLflow
+        run: python src/track.py
+
       - name: Promotion gate
-        env:
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
-          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
         run: python src/promote.py
 
       - name: Drift monitoring
         run: python src/monitor.py
 
-      # The notification the whole pipeline exists to produce: something moved
-      # enough to trip the drift threshold, and the gate did not accept a new model.
-      - name: Fail if drift detected without a promotion
+      - name: Push the updated data
+        continue-on-error: true
+        run: |
+          if dvc remote list | grep -q origin; then
+            dvc push -q || echo "::warning::dvc push failed"
+          fi
+
+      # The notification the whole pipeline exists to produce. drift_detected
+      # follows accuracy, not distribution: September 2026 really was warmer than
+      # September 2025 and the model absorbed it, so paging on that would be noise.
+      # This fires when the model is genuinely degrading AND the retrain did not
+      # produce something better.
+      - name: Fail if the model is degrading and nothing was promoted
         if: always()
         run: |
           python - <<'PY'
           import json, pathlib, sys
           drift = json.loads(pathlib.Path("reports/drift.json").read_text())
           promo = json.loads(pathlib.Path("reports/promotion.json").read_text())
+          accuracy = drift.get("prediction_error", {})
           print(f"drift_detected={drift['drift_detected']} "
-                f"drifted_share={drift['drifted_column_share']:.2f} "
+                f"accuracy_degradation={accuracy.get('degradation_pct', 'n/a')}% "
+                f"distribution_drift={drift.get('distribution_drift')} "
                 f"promoted={promo['promoted']}")
           if drift["drift_detected"] and not promo["promoted"]:
-              print("::error::Drift detected and the new model was not promoted. "
-                    "Investigate the data or the model before trusting the API.")
+              print("::error::Model accuracy is degrading and the new model was not "
+                    "promoted. Investigate before trusting the API.")
               sys.exit(1)
           PY
 

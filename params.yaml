@@ -3,8 +3,10 @@
 # stages that depend on it.
 
 data:
-  # 365 hourly days ~= 8760 rows, the size the project expects.
-  ingest_days: 365
+  # 730 days, not 365: the drift monitor compares the last 30 days against the same
+  # 30 days one year earlier, and a seasonal comparison needs two years of history
+  # to exist. With only 365 days there is nothing to compare September against.
+  ingest_days: 730
   # Time-based split only: the most recent 30 days are the test set, the 30 days
   # before that are validation. Nothing is ever shuffled.
   test_window_days: 30
@@ -49,6 +51,14 @@ drift:
   p_value: 0.05
   # Compare the last 30 days against the training window.
   recent_window_days: 30
+  # Reference window = the same 30 days, one year earlier. Comparing 30 days of
+  # September against a year-long reference flags every season as drift; matching
+  # the season is what makes the alert mean something.
+  reference_lag_days: 365
+  # Also alert when recent accuracy is worse than this percentage versus the MAE
+  # the model achieved on its test window. This is the signal that actually matters:
+  # distribution drift is only interesting once it costs accuracy.
+  max_mae_degradation_pct: 5.0
 
 api:
   horizon_hours: 24

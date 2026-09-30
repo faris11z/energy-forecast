@@ -417,3 +417,83 @@ reports/baseline_metrics.json - DVC now owns them. 3 commits on `agent-run-2`.
 5. Run the retrain workflow once via workflow_dispatch and watch the artifacts.
 6. Only then enable the schedule and trust the alerts, after fixing the seasonal
    drift reference in src/monitor.py.
+
+---
+
+# Session 3 - fixing the known gaps (agent-run-2, continued)
+
+**Start 18:06:01Z.** Picking up the three gaps flagged at the end of session 2.
+DagsHub itself was left alone: it needs an access token, and the user had not
+created the repo, so it stays a manual step.
+
+## 1. Drift false positive - FIXED and verified
+
+**Root cause, and it was worse than "use last year instead".** The dataset was
+exactly 365 days, so a year-over-year comparison was arithmetically impossible.
+There was no seasonal reference available at all. Fixing the monitor properly
+required more data.
+
+- `data.ingest_days: 365 -> 730`. Re-ran `dvc repro`, which re-ingested:
+  **17,518 rows, 2024-09-30 .. 2026-09-29**.
+- `src/monitor.py`: new `reference_window()` returns the same 30 days one year
+  earlier. If history is too short it falls back to the training set and reports
+  `seasonally_matched: false` instead of a meaningless number.
+- New params: `drift.reference_lag_days: 365`, `drift.max_mae_degradation_pct: 5.0`.
+
+**The more interesting finding.** With the seasonal reference in place the alert
+still fired, on 2 of 4 columns (temperature, load). But the accuracy check said
+recent MAE 1,445.69 vs 1,438.54 at training = **+0.5% degradation**. So September
+2026 genuinely was warmer and busier than September 2025, the distribution really
+did move, and the model did not care.
+
+That is a design lesson, not a threshold-tuning exercise: a distribution shift is
+only an incident once it costs accuracy. So `drift_detected` now follows accuracy
+and `distribution_drift` is reported next to it for whoever investigates. Result:
+**`drift_detected: false`**, `distribution_drift: true` (2/4 columns), which is the
+honest answer in both directions.
+
+## 2. tests/test_monitor.py - 3 new tests, all passing
+
+The regression guard for the above: same-season comparison must not drift, a 15%
+level shift must, the short-history fallback must report `False`. One of my three
+tests was wrong on the first run (I assumed 400 days was too short for a 365-day
+lag; the arithmetic says otherwise) - the test was fixed, not the code.
+
+## 3. retrain.yml - three real fixes
+
+- **"Configure DagsHub credentials" now configures a DVC remote.** Previously it
+  only echoed. A fresh checkout has no `data/` (it is gitignored) and no remote, so
+  `dvc pull` failed and `continue-on-error` hid it, and the pipeline quietly
+  re-downloaded from the public APIs instead of using versioned data. The step now
+  reads a new `DAGSHUB_REMOTE_URL` secret and runs `dvc remote add`. The token stays
+  out of the URL because `.dvc/config` is committed to git.
+- **`src/track.py` is now called**, so the remote registry holds the experiment
+  history instead of only promotion candidates.
+- **`MLFLOW_TRACKING_URI` and `DAGSHUB_TOKEN` are job-level `env`**, so every
+  python call agrees on where the registry is, rather than only the promote step.
+
+All three workflows re-validated with `yaml.safe_load`.
+
+## 4. Bonus: two years of data made the model materially better
+
+| | session 2 (1 year) | now (2 years) |
+|---|---|---|
+| rows | 8,758 | 17,518 |
+| test MAE | 1,529.96 MW | **1,438.54 MW** |
+| vs baseline | -17.8% | **-22.7%** |
+
+The test window is unchanged (still the most recent 30 days), so this is a clean
+comparison. The promotion gate confirmed it independently: **PROMOTED v4**, 5.98%
+better than the previous production model v2, above the 1% gate. `app/api.py` now
+reports `registry:energy-load-forecaster@production=v4` on /health.
+
+That is the third distinct gate behaviour observed: promote-the-first, reject-a-
+worse-model, promote-a-genuinely-better-model.
+
+## Verification status
+
+- `dvc repro`: passes, 4 stages, re-ran after the params change
+- `pytest -q`: **6 passed** (3 API + 3 monitor), offline
+- `src/track.py`, `src/promote.py`, `src/monitor.py`: all run clean in sequence
+- API serves the registry version
+- Workflows: syntax-checked only, still cannot be run without credentials

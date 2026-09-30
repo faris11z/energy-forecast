@@ -5,8 +5,8 @@ stages:
     deps:
     - path: params.yaml
       hash: md5
-      md5: 21dce9d9a71b5c238f6674e27da3ab48
-      size: 1531
+      md5: 6d8184f9173ff3c6ecc00265797366ad
+      size: 2221
       isexec: true
     - path: src/common.py
       hash: md5
@@ -21,16 +21,16 @@ stages:
     outs:
     - path: data/raw/load_weather.csv
       hash: md5
-      md5: 4718973ff052a7b6dc8c5aaca564c464
-      size: 658910
+      md5: 224b69bb115b624b4852c392951e8b0a
+      size: 1317256
       isexec: true
   features:
     cmd: python src/features.py
     deps:
     - path: params.yaml
       hash: md5
-      md5: 21dce9d9a71b5c238f6674e27da3ab48
-      size: 1531
+      md5: 6d8184f9173ff3c6ecc00265797366ad
+      size: 2221
       isexec: true
     - path: src/common.py
       hash: md5
@@ -45,16 +45,16 @@ stages:
     outs:
     - path: data/processed/features.csv
       hash: md5
-      md5: 1a9adfc2eb2a35eaa9db3638152fb9cd
-      size: 993159
+      md5: 8d1c3d705c4e9d3a1eeb872f395888ee
+      size: 2006437
       isexec: true
   train:
     cmd: python src/train.py
     deps:
     - path: params.yaml
       hash: md5
-      md5: 21dce9d9a71b5c238f6674e27da3ab48
-      size: 1531
+      md5: 6d8184f9173ff3c6ecc00265797366ad
+      size: 2221
       isexec: true
     - path: src/common.py
       hash: md5
@@ -74,21 +74,21 @@ stages:
     outs:
     - path: models/lgbm_load.txt
       hash: md5
-      md5: 46b9031fa1919a3ad3c613bb5d809a07
-      size: 277317
+      md5: ede08daa38098693076913cd94f2a939
+      size: 286459
       isexec: true
     - path: reports/train_metrics.json
       hash: md5
-      md5: 583ee28e8fabc66510d436a526d03948
-      size: 877
+      md5: 97b2c8e8044aac19f3775647da671039
+      size: 878
       isexec: true
   evaluate:
     cmd: python src/baseline.py && python src/evaluate.py
     deps:
     - path: params.yaml
       hash: md5
-      md5: 21dce9d9a71b5c238f6674e27da3ab48
-      size: 1531
+      md5: 6d8184f9173ff3c6ecc00265797366ad
+      size: 2221
       isexec: true
     - path: src/baseline.py
       hash: md5
@@ -108,11 +108,11 @@ stages:
     outs:
     - path: metrics.json
       hash: md5
-      md5: 4b6d316ff0faf58b7e3163ca327f53cc
-      size: 1872
+      md5: a1dd35218680c234b6af511a9c6b1e0d
+      size: 1948
       isexec: true
     - path: reports/baseline_metrics.json
       hash: md5
-      md5: 24f16bfd77381c0d33ed28a8008d8721
+      md5: a558c9862e87bf6865b09335a84d85c4
       size: 361
       isexec: true
