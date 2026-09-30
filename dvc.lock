@@ -1,0 +1,55 @@
+schema: '2.0'
+stages:
+  ingest:
+    cmd: python src/ingest.py
+    deps:
+    - path: params.yaml
+      hash: md5
+      md5: 21dce9d9a71b5c238f6674e27da3ab48
+      size: 1531
+      isexec: true
+    - path: src/common.py
+      hash: md5
+      md5: 7e505e2f6ac86618a693a4e02fa94bbd
+      size: 3417
+      isexec: true
+    - path: src/ingest.py
+      hash: md5
+      md5: d60c0cb863b2ed6f0258cf9c3a821f6f
+      size: 4228
+      isexec: true
+    outs:
+    - path: data/raw/load_weather.csv
+      hash: md5
+      md5: 4718973ff052a7b6dc8c5aaca564c464
+      size: 658910
+      isexec: true
+  features:
+    cmd: python src/features.py
+    deps:
+    - path: data/raw/load_weather.csv
+      hash: md5
+      md5: 4718973ff052a7b6dc8c5aaca564c464
+      size: 658910
+      isexec: true
+    - path: params.yaml
+      hash: md5
+      md5: 21dce9d9a71b5c238f6674e27da3ab48
+      size: 1531
+      isexec: true
+    - path: src/common.py
+      hash: md5
+      md5: 7e505e2f6ac86618a693a4e02fa94bbd
+      size: 3417
+      isexec: true
+    - path: src/features.py
+      hash: md5
+      md5: ee549dd83cbf3abae40dabf1f4c9777f
+      size: 3443
+      isexec: true
+    outs:
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 1a9adfc2eb2a35eaa9db3638152fb9cd
+      size: 993159
+      isexec: true

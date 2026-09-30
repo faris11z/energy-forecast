@@ -39,6 +39,10 @@ def tracking_uri() -> str:
     MLFLOW_TRACKING_URI switches this between the local ./mlruns store and DagsHub,
     which is why the value comes from the environment and not from the code.
     """
+    # MLflow 3.x puts the file store in maintenance mode and raises unless this is
+    # set. The brief asks for a local ./mlruns store, so opt in. Migrating to
+    # sqlite:///mlflow.db is the documented long-term fix.
+    os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
     return os.environ.get("MLFLOW_TRACKING_URI", (ROOT / "mlruns").as_uri())
 
 

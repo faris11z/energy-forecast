@@ -12,6 +12,7 @@ same code runs against the local ./mlruns store and against DagsHub later.
 import json
 from datetime import datetime, timezone
 
+import lightgbm as lgb
 import mlflow
 import mlflow.lightgbm
 from mlflow.exceptions import MlflowException
@@ -31,14 +32,23 @@ def log_candidate(metrics: dict) -> str:
     The model is always logged, even when the gate rejects it: a rejected version is
     still a useful artefact to compare against later.
     """
-    booster = mlflow.lightgbm.Booster(model_file=str(MODEL_PATH))
-    result = mlflow.lightgbm.log_model(
+    booster = lgb.Booster(model_file=str(MODEL_PATH))
+    mlflow.lightgbm.log_model(
         booster, name="model", registered_model_name=REGISTERED_NAME
     )
-    del result
-    return mlflow.tracking.MlflowClient().search_model_versions(
-        f"name='{REGISTERED_NAME}'", order_by=["version desc"], max_results=1
-    )[0].version
+    return _latest_version()
+
+
+def _latest_version() -> str:
+    """Highest registered version.
+
+    Sorting with order_by is not supported by every backend (the local file store
+    rejects it), so pick the maximum in Python instead.
+    """
+    versions = mlflow.tracking.MlflowClient().search_model_versions(
+        f"name='{REGISTERED_NAME}'"
+    )
+    return max(versions, key=lambda v: int(v.version)).version
 
 
 def production_mae() -> tuple[float | None, str | None]:
@@ -63,10 +73,11 @@ def decide(new_mae: float, old_mae: float | None) -> tuple[bool, str]:
     improvement = (old_mae - new_mae) / old_mae * 100
     if improvement >= MIN_IMPROVEMENT_PCT:
         return True, f"MAE {improvement:.2f}% better, above the {MIN_IMPROVEMENT_PCT}% gate"
+    direction = "better" if improvement >= 0 else "worse"
     return (
         False,
-        f"MAE only {improvement:.2f}% better, below the {MIN_IMPROVEMENT_PCT}% gate, "
-        "keeping the current production model",
+        f"MAE is {abs(improvement):.2f}% {direction}, below the "
+        f"{MIN_IMPROVEMENT_PCT}% gate, keeping the current production model",
     )
 
 

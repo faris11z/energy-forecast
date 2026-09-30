@@ -1,0 +1,12 @@
+{
+  "checked_at_utc": "2026-09-30T15:50:01Z",
+  "new_model_mae_mw": 6561.454526885937,
+  "production_mae_mw": 1529.961255515568,
+  "production_version": 2,
+  "min_improvement_pct": 1.0,
+  "promoted": false,
+  "reason": "MAE only -328.86% better, below the 1.0% gate, keeping the current production model",
+  "improvement_pct": -328.8640972594336,
+  "candidate_version": 3,
+  "promoted_version": 2
+}

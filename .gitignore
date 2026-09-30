@@ -26,3 +26,7 @@ models/
 
 # DVC versioned data and artifacts
 .dvc/cache
+
+# Generated metrics belong to DVC, not git (files stay on disk)
+reports/train_metrics.json
+reports/baseline_metrics.json
