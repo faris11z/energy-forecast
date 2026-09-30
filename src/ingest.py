@@ -9,13 +9,17 @@ Sources (both free, no API key, no credentials needed):
 Everything is indexed by UTC. Re-run this script to refresh the dataset.
 """
 
+import sys
 from pathlib import Path
 
 import pandas as pd
 import requests
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common import load_params  # noqa: E402
+
 # 365 days of hourly data gives 8760 rows, the ~8700 the project expects.
-DAYS = 365
+DAYS = load_params()["data"]["ingest_days"]
 
 # One representative city per region; Germany has no single "national" weather point.
 CITIES = {

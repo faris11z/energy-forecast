@@ -1,0 +1,40 @@
+name: CI
+
+# Runs on every push and pull request. Everything here is offline: the fixture data
+# step replaces the two public APIs with a synthetic series, so CI never depends on
+# energy-charts or Open-Meteo being up, and never hammers them.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt ruff
+
+      - name: Lint
+        run: ruff check src app tests
+
+      - name: Build offline fixture data and model
+        run: python tests/make_fixture_data.py
+
+      - name: Test
+        run: pytest -q
+
+      - name: Validate the DVC pipeline file
+        run: python -c "import yaml; yaml.safe_load(open('dvc.yaml')); print('dvc.yaml ok')"
+
+      # Build only. Pushing an image is a separate, deliberate step.
+      - name: Build the API image
+        run: docker build -t energy-forecast-api:ci .

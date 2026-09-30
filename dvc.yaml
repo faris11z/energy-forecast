@@ -1,0 +1,49 @@
+# Reproducible pipeline. `dvc repro` runs these in order and skips any stage whose
+# deps have not changed, so a param edit reruns only what it can actually affect.
+
+stages:
+  ingest:
+    cmd: python src/ingest.py
+    deps:
+      - src/ingest.py
+      - src/common.py
+      - params.yaml
+    outs:
+      - data/raw/load_weather.csv
+
+  features:
+    cmd: python src/features.py
+    deps:
+      - src/features.py
+      - src/common.py
+      - params.yaml
+      - data/raw/load_weather.csv
+    outs:
+      - data/processed/features.csv
+
+  train:
+    cmd: python src/train.py
+    deps:
+      - src/train.py
+      - src/features.py
+      - src/common.py
+      - params.yaml
+      - data/processed/features.csv
+    outs:
+      - models/lgbm_load.txt
+      - reports/train_metrics.json
+      - reports/feature_importance.csv
+
+  evaluate:
+    cmd: python src/baseline.py && python src/evaluate.py
+    deps:
+      - src/baseline.py
+      - src/evaluate.py
+      - src/common.py
+      - params.yaml
+      - data/raw/load_weather.csv
+      - models/lgbm_load.txt
+      - reports/train_metrics.json
+    outs:
+      - metrics.json
+      - reports/baseline_metrics.json

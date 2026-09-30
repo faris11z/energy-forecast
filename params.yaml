@@ -1,0 +1,54 @@
+# Single source of truth for the pipeline. Every script and every DVC stage reads
+# this file, so changing a number here and running `dvc repro` reruns exactly the
+# stages that depend on it.
+
+data:
+  # 365 hourly days ~= 8760 rows, the size the project expects.
+  ingest_days: 365
+  # Time-based split only: the most recent 30 days are the test set, the 30 days
+  # before that are validation. Nothing is ever shuffled.
+  test_window_days: 30
+  valid_window_days: 30
+
+features:
+  # Lags must stay >= 24 to avoid leakage into the day-ahead forecast.
+  lag_hours: [24, 168]
+  rolling_window_hours: 168
+  weather_columns:
+    - temperature_2m
+    - wind_speed_10m
+    - shortwave_radiation
+
+model:
+  # Small and regularised on purpose: ~8000 rows means overfitting is the real
+  # risk, not capacity.
+  objective: regression
+  metric: mae
+  learning_rate: 0.05
+  num_leaves: 31
+  min_data_in_leaf: 40
+  feature_fraction: 0.9
+  bagging_fraction: 0.9
+  bagging_freq: 1
+  seed: 42
+
+baseline:
+  # 7 days = the seasonal-naive lag.
+  lag_hours: 168
+
+promote:
+  # A new model must beat the registered production model by at least this
+  # percentage on test MAE to earn the "production" alias.
+  min_improvement_pct: 1.0
+  registered_model_name: energy-load-forecaster
+
+drift:
+  # Alert when the share of drifted columns exceeds this.
+  drifted_column_share: 0.25
+  # Per-column test, used by the Evidently report.
+  p_value: 0.05
+  # Compare the last 30 days against the training window.
+  recent_window_days: 30
+
+api:
+  horizon_hours: 24

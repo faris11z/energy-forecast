@@ -9,10 +9,10 @@ import json
 
 import pandas as pd
 
-from common import REPORTS, load_raw, regression_metrics, split_time
+from common import REPORTS, load_params, load_raw, regression_metrics, split_time
 
 # 7 days * 24 hours. 168h is also far enough back to stay leakage-free.
-WEEK_LAG = 168
+WEEK_LAG = load_params()["baseline"]["lag_hours"]
 
 # Seasonal naive needs the previous week, so the earliest 168 rows have no forecast.
 RESULTS = {}

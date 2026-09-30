@@ -8,19 +8,21 @@ is shifted by one hour, so nothing derived from the target leaks backwards.
 import holidays
 import pandas as pd
 
+from common import load_params
+
+_PARAMS = load_params()["features"]
+LAG_HOURS = _PARAMS["lag_hours"]
+ROLLING_WINDOW = _PARAMS["rolling_window_hours"]
+WEATHER_COLUMNS = _PARAMS["weather_columns"]
+
 # Every column the model sees. Listed in one place so train and the API cannot drift.
-FEATURE_COLUMNS = [
-    "hour",
-    "weekday",
-    "month",
-    "is_holiday",
-    "lag_24h",
-    "lag_168h",
-    "rolling_mean_7d",
-    "temperature_2m",
-    "wind_speed_10m",
-    "shortwave_radiation",
-]
+# The lag names are generated from params, so params stays the only place to change.
+FEATURE_COLUMNS = (
+    ["hour", "weekday", "month", "is_holiday"]
+    + [f"lag_{hours}h" for hours in LAG_HOURS]
+    + [f"rolling_mean_{ROLLING_WINDOW // 24}d"]
+    + list(WEATHER_COLUMNS)
+)
 
 TARGET = "load_mw"
 
@@ -46,18 +48,18 @@ def add_lag_features(frame: pd.DataFrame) -> pd.DataFrame:
     """Target-derived features, all shifted far enough back to be leakage-free."""
     load = frame[TARGET]
     out = pd.DataFrame(index=frame.index)
-    out["lag_24h"] = load.shift(24)
-    out["lag_168h"] = load.shift(168)
+    for hours in LAG_HOURS:
+        out[f"lag_{hours}h"] = load.shift(hours)
     # shift(1) first so the window ends at t-1 and never includes the target hour.
-    out["rolling_mean_7d"] = load.shift(1).rolling(168, min_periods=168).mean()
+    out[f"rolling_mean_{ROLLING_WINDOW // 24}d"] = (
+        load.shift(1).rolling(ROLLING_WINDOW, min_periods=ROLLING_WINDOW).mean()
+    )
     return out
 
 
 def build_features(frame: pd.DataFrame) -> pd.DataFrame:
     """Full feature matrix (all FEATURE_COLUMNS) aligned to the frame's UTC index."""
-    weather = frame[
-        ["temperature_2m", "wind_speed_10m", "shortwave_radiation"]
-    ]
+    weather = frame[WEATHER_COLUMNS]
     features = pd.concat(
         [add_calendar_features(frame), add_lag_features(frame), weather], axis=1
     )
@@ -74,3 +76,21 @@ def build_xy(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     target = frame[TARGET]
     keep = features.notna().all(axis=1) & target.notna()
     return features.loc[keep], target.loc[keep]
+
+
+def main() -> None:
+    """Entry point for the DVC `features` stage: materialise the feature table so
+    downstream stages depend on a real file instead of recomputing it."""
+    from common import PROCESSED_CSV, load_raw
+
+    features, target = build_xy(load_raw())
+    table = features.copy()
+    table[TARGET] = target
+
+    PROCESSED_CSV.parent.mkdir(parents=True, exist_ok=True)
+    table.to_csv(PROCESSED_CSV)
+    print(f"Wrote {len(table)} rows x {len(table.columns)} cols to {PROCESSED_CSV}")
+
+
+if __name__ == "__main__":
+    main()

@@ -242,3 +242,23 @@ explain why it failed" condition never triggered.
    directly from a 24h horizon the way a real day-ahead run would, it walks the
    horizon recursively. The test MAE therefore describes recursive 24-step accuracy,
    not 24 independent 24h-ahead forecasts. Worth fixing before production.
+
+---
+
+# Session 2 - MLOps layer (agent-run-2)
+
+## Session start
+
+- **Start time (UTC): 2026-09-30T15:31:41Z**
+- Timebox: 60 min. No new phase started after 16:21:41Z. Last 10 min = wrap-up only.
+- Starting point: branch `agent-run-1` @ b19d188, ML layer already working
+  (3/3 pytest green, LightGBM test MAE 1,529.96 MW vs baseline 1,860.29 MW).
+- Goal this session: DVC pipeline, model registry + promotion gate, API serving
+  from the registry, drift monitoring, CI, scheduled retraining, HF Space config.
+
+## Environment carry-over from session 1
+
+WSL sandbox, not Windows. `python3 -m venv --without-pip` + `get-pip.py` was needed,
+and `libgomp.so.1` is missing from the system image, so every command runs with
+`LD_LIBRARY_PATH=$PWD/.venv/lib`. Also: a real HTTP bind does not work in this
+sandbox (session 1 finding), so the API is exercised through the Flask test client.

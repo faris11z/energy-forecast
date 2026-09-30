@@ -10,22 +10,25 @@ import json
 import lightgbm as lgb
 import pandas as pd
 
-from common import MODEL_PATH, REPORTS, load_raw, regression_metrics, split_time
+from common import (
+    MODEL_PATH,
+    PROCESSED_CSV,
+    REPORTS,
+    load_params,
+    load_processed,
+    load_raw,
+    regression_metrics,
+    split_time,
+)
 from features import FEATURE_COLUMNS, TARGET, build_xy
 
 # Small, regularised trees: this dataset is ~8000 rows, so capacity is not the
 # bottleneck and overfitting is the real risk.
 PARAMS = {
-    "objective": "regression",
-    "metric": "mae",
-    "learning_rate": 0.05,
-    "num_leaves": 31,
-    "min_data_in_leaf": 40,
-    "feature_fraction": 0.9,
-    "bagging_fraction": 0.9,
-    "bagging_freq": 1,
+    # Hyperparameters come from params.yaml so a DVC param change reruns training.
+    **load_params()["model"],
+    # verbose/silent is a logging switch, not a model setting, so it stays here.
     "verbose": -1,
-    "seed": 42,
 }
 
 RESULTS: dict[str, dict[str, float]] = {}
@@ -49,7 +52,14 @@ def main() -> None:
 
     # Features are computed once on the full series. Every feature looks strictly
     # backwards, so slicing afterwards cannot leak future information.
-    features, target = build_xy(frame)
+    # Prefer the table materialised by the DVC `features` stage. It is produced by
+    # the same build_xy() call, so the numbers are identical; falling back keeps
+    # the script runnable on its own.
+    if PROCESSED_CSV.exists():
+        table = load_processed()
+        features, target = table[FEATURE_COLUMNS], table[TARGET]
+    else:
+        features, target = build_xy(frame)
     train_raw = frame.iloc[: frame.index.get_loc(valid_raw.index[0])]
 
     X_train, y_train = _subset(train_raw.index, features), _subset(

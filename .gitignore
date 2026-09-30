@@ -23,3 +23,6 @@ __pycache__/
 *.key
 # Trained model artifact: regenerate with src/train.py, keeps the repo small
 models/
+
+# DVC versioned data and artifacts
+.dvc/cache

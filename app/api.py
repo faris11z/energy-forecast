@@ -9,6 +9,7 @@ lag_168h of hour t+2 must reflect what we predicted for hour t+1; a single batch
 would leave those lags empty.
 """
 
+import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -21,7 +22,7 @@ from flask import Flask, jsonify
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from common import MODEL_PATH, load_raw  # noqa: E402
+from common import MODEL_PATH, load_raw, tracking_uri  # noqa: E402
 from features import TARGET, build_features  # noqa: E402
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -32,10 +33,40 @@ CITIES = {
 }
 HOURS = 24
 
+# The registry entry the promotion gate maintains (see src/promote.py).
+REGISTERED_NAME = "energy-load-forecaster"
+ALIAS = "production"
+
 app = Flask(__name__)
 
+
+def load_model():
+    """Load the model with the "production" alias, falling back to the local file.
+
+    Serving from the registry is what makes a promotion take effect: the API does
+    not need redeploying, it just reads whichever version holds the alias. The
+    fallback keeps a fresh clone working before anything has ever been promoted.
+
+    Returns (model, description) so /health can report which one is live.
+    """
+    try:
+        import mlflow
+        import mlflow.lightgbm
+
+        mlflow.set_tracking_uri(tracking_uri())
+        model = mlflow.lightgbm.load_model(f"models:/{REGISTERED_NAME}@{ALIAS}")
+        client = mlflow.tracking.MlflowClient()
+        version = client.get_model_version_by_alias(REGISTERED_NAME, ALIAS).version
+        return model, f"registry:{REGISTERED_NAME}@{ALIAS}=v{version}"
+    except Exception as error:  # noqa: BLE001 - any registry problem falls back
+        print(f"registry load failed ({error}), falling back to {MODEL_PATH}")
+        if MODEL_PATH.exists():
+            return lgb.Booster(model_file=str(MODEL_PATH)), f"file:{MODEL_PATH.name}"
+        return None, "none"
+
+
 # Loaded once at import so /predict does not re-read the model on every call.
-MODEL = lgb.Booster(model_file=str(MODEL_PATH)) if MODEL_PATH.exists() else None
+MODEL, MODEL_SOURCE = load_model()
 
 
 def fetch_forecast_weather(start: datetime, hours: int) -> pd.DataFrame:
@@ -149,7 +180,7 @@ def health():
         {
             "status": "ok",
             "model_loaded": MODEL is not None,
-            "model_path": str(MODEL_PATH),
+            "model_source": MODEL_SOURCE,
             "utc_now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     ), 200
@@ -173,4 +204,7 @@ def predict():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    # PORT is set by the hosting platform (7860 on a Hugging Face Space); 8000
+    # locally. Reading it from the environment is what makes the same image work
+    # in both places.
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
