@@ -1,0 +1,25 @@
+# Data and artifacts: regenerable, too large for git
+data/
+mlruns/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Models
+*.pkl
+*.joblib
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets: never commit
+.env
+*.key
+# Trained model artifact: regenerate with src/train.py, keeps the repo small
+models/

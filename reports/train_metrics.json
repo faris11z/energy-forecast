@@ -1,0 +1,43 @@
+{
+  "params": {
+    "objective": "regression",
+    "metric": "mae",
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "min_data_in_leaf": 40,
+    "feature_fraction": 0.9,
+    "bagging_fraction": 0.9,
+    "bagging_freq": 1,
+    "verbose": -1,
+    "seed": 42
+  },
+  "results": {
+    "train": {
+      "mae_mw": 1343.0992823630388,
+      "rmse_mw": 1868.4657654830278,
+      "mape_pct": 2.41457904499828
+    },
+    "valid": {
+      "mae_mw": 1662.1746495234645,
+      "rmse_mw": 2049.1663561952523,
+      "mape_pct": 3.4538406945627056
+    },
+    "test": {
+      "mae_mw": 1559.924074529882,
+      "rmse_mw": 2004.8613770560578,
+      "mape_pct": 2.897747678931403
+    }
+  },
+  "features": [
+    "hour",
+    "weekday",
+    "month",
+    "is_holiday",
+    "lag_24h",
+    "lag_168h",
+    "rolling_mean_7d",
+    "temperature_2m",
+    "wind_speed_10m",
+    "shortwave_radiation"
+  ]
+}
