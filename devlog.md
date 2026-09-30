@@ -563,3 +563,61 @@ included, which it has no use for.
   version
 - `pytest` still green after the requirements change, so the bounds did not
   accidentally exclude anything in use
+
+---
+
+# Session 3c - wiring DagsHub for real (agent-run-2, continued)
+
+**Start 18:35Z.** The DagsHub repo now exists (faris11z/energy-forecast). Goal: make
+the workflows actually talk to it.
+
+## Two bugs that only a real repo exposed
+
+1. **MLflow auth was missing entirely.** `retrain.yml` set `MLFLOW_TRACKING_URI` and
+   `DAGSHUB_TOKEN`, but DagsHub's MLflow server requires HTTP basic auth. Without
+   `MLFLOW_TRACKING_USERNAME` and `MLFLOW_TRACKING_PASSWORD`, every `track.py` and
+   `promote.py` call in CI would have failed with a 401. The job env now sets all
+   three. No Python change was needed: `common.tracking_uri()` only supplies the URI
+   and MLflow consumes the two auth vars itself.
+
+2. **The DVC remote used the legacy `.dvc` URL style.** DagsHub's current documented
+   method is an S3-compatible endpoint. This was not cosmetic - `.dvc/config` is
+   committed to git in this project, so the S3 style matters because the two
+   credential lines use `--local`, which writes them to `.dvc/config.local` instead.
+   The legacy style would have needed the same care with none of the clarity. It is
+   also non-interactive, which is what CI requires.
+
+Verified both: only `--local` lines carry the token, and the only public value
+written to committed config is the endpoint URL.
+
+## Configuration reduced to one secret
+
+Worth recording as a design change, not just an edit. This started as four GitHub
+secrets, three of which were public values wearing a disguise:
+
+| was | now |
+|---|---|
+| `DAGSHUB_TOKEN` (secret) | `DAGSHUB_TOKEN` (secret) |
+| `DAGSHUB_REMOTE_URL` (secret) | committed constant in `retrain.yml` |
+| `MLFLOW_TRACKING_URI` (secret) | committed constant in `retrain.yml` |
+| `MLFLOW_TRACKING_USERNAME` (missing) | committed constant in `retrain.yml` |
+| `MLFLOW_TRACKING_PASSWORD` (missing) | reuses `secrets.DAGSHUB_TOKEN` |
+
+Putting a URL in Actions secrets hides it from the log, so a misconfigured pipeline
+reports a blank name instead of the URL it actually tried. `grep -roh "secrets\.[A-Z_]*"`
+now returns exactly `DAGSHUB_TOKEN` and `HF_TOKEN`, the latter deploy-only.
+
+## What is still unverified
+
+The YAML parses and the DVC command syntax is valid, but **whether DagsHub's token
+works as both `access_key_id` and `secret_access_key` has not been proven** - that
+needs a real run. If it is wrong, it fails loudly in `dvc pull` rather than silently,
+because that step is `continue-on-error` with a warning. The MLflow 401 fix is the
+same: reasoned from DagsHub's documented auth model, not observed failing.
+
+## Verification status
+
+- `retrain.yml` parses; all 12 steps present in the intended order
+- No workflow or doc still references the removed `DAGSHUB_REMOTE_URL`
+- Token appears only in `--local` modify lines
+- `pytest` not re-run this session: no Python changed

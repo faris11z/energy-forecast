@@ -84,27 +84,36 @@ Nothing below is automated yet, and none of it can be done from CI without you.
 
 1. **Create the DagsHub repo** (dags hub.com, free for personal use). Copy the repo
    URL. `dvc remote add origin <url>` and `dvc push` as below.
-2. **Point DVC at DagsHub** (run in the project root, on your machine):
-   ```powershell
-   dvc remote add origin https://dagshub.com/<user>/<repo>.git
-   dvc remote list          # confirm origin exists
-   dvc push                 # first upload of data/
+2. **Point DVC at DagsHub** (run in the project root, on your machine). DagsHub
+   exposes an S3-compatible endpoint; the two `--local` flags keep your token out
+   of `.dvc/config`, which is committed to git:
+   ```bash
+   dvc remote add -d origin s3://dvc
+   dvc remote modify origin endpointurl https://dagshub.com/<user>/<repo>.s3
+   dvc remote modify origin --local access_key_id <token>
+   dvc remote modify origin --local secret_access_key <token>
+   dvc push                  # first upload of data/
    ```
-   Retrieve an access token from DagsHub under Settings -> Access Tokens.
-3. **Add GitHub repository secrets** (Settings -> Secrets and variables -> Actions):
+   Retrieve an access token from DagsHub under your avatar -> Access Tokens.
+3. **Add one GitHub repository secret** (Settings -> Secrets and variables -> Actions):
    - `DAGSHUB_TOKEN` - the DagsHub token from step 2
-   - `DAGSHUB_REMOTE_URL` - e.g. `https://dagshub.com/<user>/<repo>.dvc`. The token
-     is deliberately *not* part of this URL, because `.dvc/config` is committed to
-     git. `retrain.yml` reads this to run `dvc remote add`, which is what lets a
-     fresh CI checkout fetch versioned data instead of silently re-downloading from
-     the public APIs. Without it that workflow still runs, on fresh data.
-   - `MLFLOW_TRACKING_URI` - e.g. `https://dagshub.com/<user>/<repo>.mlflow`
-   - `HF_TOKEN` - a Hugging Face write token, needed only for deploys
-4. **Point MLflow at DagsHub locally** to test the same code path:
+
+   That is the only secret. The remaining values are public URLs, so they are
+   committed in `.github/workflows/retrain.yml` and are visible in the Actions log:
+   - the MLflow URI, `https://dagshub.com/<user>/<repo>.mlflow`
+   - the DVC S3 endpoint, `https://dagshub.com/<user>/<repo>.s3`
+   - your DagsHub username, used as `MLFLOW_TRACKING_USERNAME`
+
+   `HF_TOKEN` (a Hugging Face write token) is needed only for deploys.
+4. **Point MLflow at DagsHub locally** to test the same code path. All three
+   variables are required: the URI alone is not enough, because DagsHub's MLflow
+   server rejects unauthenticated requests.
    ```powershell
    $env:MLFLOW_TRACKING_URI = "https://dagshub.com/<user>/<repo>.mlflow"
+   $env:MLFLOW_TRACKING_USERNAME = "<user>"
+   $env:MLFLOW_TRACKING_PASSWORD = "<token>"
    python src\promote.py     # no code change needed
-   Remove-Item Env:MLFLOW_TRACKING_URI
+   Remove-Item Env:MLFLOW_TRACKING_URI, Env:MLFLOW_TRACKING_USERNAME, Env:MLFLOW_TRACKING_PASSWORD
    ```
 5. **Create the Hugging Face Space**: spaces.huggingface.co, Docker SDK, port 7860,
    then run the "Deploy to Hugging Face Space" workflow with `space` set to

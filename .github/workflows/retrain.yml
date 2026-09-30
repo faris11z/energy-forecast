@@ -16,11 +16,17 @@ jobs:
   retrain:
     runs-on: ubuntu-latest
     env:
-      # Set for the whole job, not per step, so every python call agrees on where
-      # the registry is. common.tracking_uri() reads MLFLOW_TRACKING_URI and falls
-      # back to the local ./mlruns store when it is empty.
-      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
-      DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+      # DagsHub is configured in exactly one place. Only the token is a secret.
+      # The URLs are public, so committing them keeps them visible in the Actions
+      # log when something breaks instead of hidden behind a blank secret name.
+      #
+      # MLFLOW_TRACKING_USERNAME/PASSWORD are not optional: DagsHub's MLflow server
+      # requires basic auth, and without them every track.py/promote.py call 401s.
+      # common.tracking_uri() only supplies the URI; MLflow consumes these two itself.
+      MLFLOW_TRACKING_URI: https://dagshub.com/faris11z/energy-forecast.mlflow
+      MLFLOW_TRACKING_USERNAME: faris11z
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+      DVC_S3_ENDPOINT: https://dagshub.com/faris11z/energy-forecast.s3
     steps:
       - uses: actions/checkout@v4
 
@@ -39,18 +45,21 @@ jobs:
       # re-downloads from the public APIs instead of using versioned data.
       - name: Configure the DVC remote
         env:
-          DAGSHUB_REMOTE_URL: ${{ secrets.DAGSHUB_REMOTE_URL }}
           DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
         run: |
-          if [ -z "$DAGSHUB_REMOTE_URL" ]; then
-            echo "::warning::DAGSHUB_REMOTE_URL is not set. dvc push/pull are disabled;"
+          if [ -z "$DAGSHUB_TOKEN" ]; then
+            echo "::warning::DAGSHUB_TOKEN is not set. dvc push/pull are disabled;"
             echo "the ingest stage will download fresh data from the public APIs."
             exit 0
           fi
           dvc remote remove origin 2>/dev/null || true
-          # No token in the URL: .dvc/config is committed, and GitHub Actions
-          # credentials come from the environment instead.
-          dvc remote add -d origin "$DAGSHUB_REMOTE_URL"
+          # DagsHub exposes an S3-compatible endpoint. The --local flag on the two
+          # credential lines is the important part: .dvc/config is committed to git,
+          # so a plain `dvc remote modify` would commit the token.
+          dvc remote add -d origin s3://dvc
+          dvc remote modify origin endpointurl "$DVC_S3_ENDPOINT"
+          dvc remote modify origin --local access_key_id "$DAGSHUB_TOKEN"
+          dvc remote modify origin --local secret_access_key "$DAGSHUB_TOKEN"
           dvc remote list
 
       - name: Pull versioned data
