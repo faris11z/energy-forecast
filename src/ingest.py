@@ -82,7 +82,9 @@ def fetch_weather(start: str, end: str) -> pd.DataFrame:
         frames.append(frame.set_index("time"))
 
     # Average cities so one weather column still covers the whole country.
-    return pd.concat(frames, axis=1).groupby(level=0).mean()
+    # axis=0 stacks the cities, then groupby averages them per hour. Concat on
+    # axis=1 would only place the cities side by side and average nothing.
+    return pd.concat(frames).groupby(level=0).mean()
 
 
 def main() -> None:

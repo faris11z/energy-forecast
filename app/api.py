@@ -10,6 +10,7 @@ would leave those lags empty.
 """
 
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -51,11 +52,23 @@ def fetch_forecast_weather(start: datetime, hours: int) -> pd.DataFrame:
         "start_date": start.strftime("%Y-%m-%d"),
         "end_date": (start + timedelta(hours=hours)).strftime("%Y-%m-%d"),
     }
-    response = requests.get(FORECAST_URL, params=params, timeout=60)
-    response.raise_for_status()
+    # Open-Meteo answers 503 fairly often under repeated calls, so retry a couple
+    # of times before giving up on a forecast.
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            response = requests.get(FORECAST_URL, params=params, timeout=60)
+            response.raise_for_status()
+            payload = response.json()
+            break
+        except requests.RequestException as error:
+            last_error = error
+            time.sleep(2 * (attempt + 1))
+    else:
+        raise RuntimeError(f"weather API failed after 3 attempts: {last_error}")
 
     frames = []
-    for city in response.json():
+    for city in payload:
         hourly = city["hourly"]
         frames.append(
             pd.DataFrame(
@@ -67,7 +80,9 @@ def fetch_forecast_weather(start: datetime, hours: int) -> pd.DataFrame:
                 }
             ).set_index("time")
         )
-    return pd.concat(frames, axis=1).groupby(level=0).mean()
+    # axis=0 stacks the cities, then groupby averages them per hour. Concat on
+    # axis=1 would only place the cities side by side and average nothing.
+    return pd.concat(frames).groupby(level=0).mean()
 
 
 def next_24_features(hours: int = HOURS, now: datetime | None = None) -> pd.DataFrame:
@@ -85,21 +100,32 @@ def next_24_features(hours: int = HOURS, now: datetime | None = None) -> pd.Data
         pd.date_range(start=start, periods=hours, freq="h", tz="UTC")
     )
     # Placeholder target so the frame has the right columns; filled in per step.
+    # A missing hour here would silently become a NaN feature, so fail loudly.
+    weather_columns = ["temperature_2m", "wind_speed_10m", "shortwave_radiation"]
+    if future[weather_columns].isna().any().any():
+        raise ValueError("weather API returned an incomplete forecast window")
     future[TARGET] = float("nan")
-    frame = pd.concat([history, future[["temperature_2m", "wind_speed_10m",
-                                        "shortwave_radiation", TARGET]]])
+    frame = pd.concat([history, future[weather_columns + [TARGET]]])
     return frame, start
 
 
-def predict_next(hours: int = HOURS, now: datetime | None = None) -> list[dict]:
-    """Predict the next `hours` load values, feeding each one back into history."""
+def forecast(hours: int = HOURS, now: datetime | None = None):
+    """Walk the horizon one hour at a time.
+
+    Returns (predictions, features_used). Both are needed together: the feature row
+    for step k+1 can only be built once step k's prediction has been written back
+    into the history, because rolling_mean_7d ends at t-1. So the whole 24-hour
+    feature block cannot be built in one go, and any test on the features has to
+    follow this same path.
+    """
     frame, start = next_24_features(hours=hours, now=now)
 
-    predictions = []
+    predictions, rows = [], []
     for step in range(hours):
         step_time = start + timedelta(hours=step)
         features = build_features(frame)
         row = features.loc[[step_time]]
+        rows.append(row)
         value = float(MODEL.predict(row[features.columns])[0])
         # Feed the prediction back so the next step's lags are defined.
         frame.loc[step_time, TARGET] = value
@@ -109,7 +135,12 @@ def predict_next(hours: int = HOURS, now: datetime | None = None) -> list[dict]:
                 "load_mw": round(value, 1),
             }
         )
-    return predictions
+    return predictions, pd.concat(rows)
+
+
+def predict_next(hours: int = HOURS, now: datetime | None = None) -> list[dict]:
+    """The next `hours` load values only."""
+    return forecast(hours=hours, now=now)[0]
 
 
 @app.get("/health")

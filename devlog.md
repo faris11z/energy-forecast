@@ -76,3 +76,84 @@ LightGBM wins on all three metrics: -16.2% MAE, -13.7% RMSE, -15.9% MAPE.
 Top features by split count: lag_24h, weekday, rolling_mean_7d, temperature_2m.
 `is_holiday` has 0 splits, which is expected: 10 holidays in 7150 rows is too rare
 for the tree to split on it, and weekday already carries most of that signal.
+
+## Correction found during phase 5 (important)
+
+While writing the API tests I found a bug in the weather merge in **both**
+`src/ingest.py` and `app/api.py`:
+
+```python
+pd.concat(frames, axis=1).groupby(level=0).mean()   # wrong
+```
+
+With one frame per city, `axis=1` puts the three cities *side by side* as 9 columns.
+`groupby(level=0).mean()` then averages nothing, because there are no duplicate index
+values. The CSV had 10 columns instead of 4, and since `features.py` selects columns
+by name, the model was silently using **Berlin only** (the first of each triple).
+
+Fixed to `pd.concat(frames).groupby(level=0).mean()` (stack, then average).
+Re-ran ingest -> baseline -> train -> track on the corrected data.
+LightGBM test MAE improved from 1,559.92 to **1,529.96** MW, MAPE 2.90 -> **2.81**.
+
+I also deleted the `mlruns/` directory I had created 5 minutes earlier and re-ran
+`src/track.py`, so the store holds exactly the two runs the brief asks for with the
+corrected numbers. That is a generated, gitignored artifact, not a source file.
+
+## Phase 4 - TRACKING (verified by running)
+
+`src/track.py`, local `./mlruns` (file:// URI), experiment
+`energy-forecast-day-ahead`, two runs:
+
+| run | test MAE (MW) | test RMSE (MW) | test MAPE (%) |
+|-----|---------------|----------------|---------------|
+| baseline | 1,860.30 | 2,322.99 | 3.45 |
+| lightgbm | 1,529.96 | 2,006.93 | 2.81 |
+
+Params logged, the LightGBM booster logged as a model artifact, feature importance
+written to `reports/feature_importance.csv`.
+
+**Blocker hit:** MLflow 3.16 refuses to write to a file store and raises
+MlflowException. Fixed by setting `MLFLOW_ALLOW_FILE_STORE=true` inside `track.py`
+with a comment pointing at the sqlite migration.
+
+## Phase 5 - API (verified by running, with one caveat)
+
+`app/api.py`, Flask, `GET /health` and `GET /predict` (next 24 hourly values).
+Model is loaded once at import. Each prediction is fed back into the history before
+the next step, because `rolling_mean_7d` for hour t+1 ends at t and needs the
+value of t. Because of that, the 24-row feature block *cannot* be built in one pass:
+only the first row is complete before any prediction exists. My first version of the
+NaN test built all 24 rows at once and correctly failed with 23 NaNs in
+`rolling_mean_7d`. The fix was not a fudge: the test now walks the same step-by-step
+path the API uses (`forecast()` returns both predictions and the features used).
+
+`pytest -q` -> **3 passed**.
+
+**Two real problems found and fixed:**
+1. Open-Meteo intermittently returns 503, which produced an empty weather block and
+   NaN features. Added 3 retries with backoff and an explicit error if the window
+   comes back incomplete, so a missing hour can never become a silent NaN.
+2. The 3-city averaging bug described above.
+
+**Caveat, not verified:** I could not get a real HTTP bind to work in this WSL
+sandbox - `python app/api.py` starts, produces no output and never listens on 8000.
+So /health and /predict are verified through the Werkzeug **test client** inside
+pytest (200 on /health, exactly 24 values from /predict, no NaN features), not
+through a real socket. Please run `python app\api.py` on Windows to confirm.
+
+## Phase 6 - DOCKER (written, NOT built)
+
+`Dockerfile` + `.dockerignore` + `requirements.txt` written. **Never built or run**:
+`docker` is not installed in this WSL distro, so the image is untested. It copies the
+gitignored `data/raw/load_weather.csv` and `models/lgbm_load.txt` from the build
+context, so those two files must exist locally before `docker build`.
+
+## Environment notes (WSL, not Windows)
+
+- `python3 -m venv` produced a venv without pip (no `python3-venv` package). Worked
+  around with `python3 -m venv --without-pip` + `get-pip.py`.
+- `libgomp.so.1` is missing in this WSL image, so `import lightgbm` failed. Fetched
+  the Ubuntu `libgomp1` .deb, extracted it into `.venv/lib/` and ran with
+  `LD_LIBRARY_PATH=$PWD/.venv/lib`. **On your Windows venv you will not need this**;
+  it is a WSL-only workaround. `.venv/lib/libgomp.so.1*` is inside the gitignored
+  venv, so nothing was committed.

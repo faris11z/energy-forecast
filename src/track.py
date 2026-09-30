@@ -5,7 +5,13 @@ Run after src/baseline.py and src/train.py have written reports/*.json.
 """
 
 import json
+import os
 from pathlib import Path
+
+# MLflow 3.x puts the ./mlruns file store in maintenance mode and refuses to write
+# unless this flag is set. The brief asks for a local ./mlruns store, so we opt in.
+# Migrating to sqlite:///mlflow.db is the documented long-term fix.
+os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
 
 import lightgbm as lgb
 import mlflow

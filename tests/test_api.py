@@ -11,10 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "app"))
 
-import pandas as pd  # noqa: E402
-
-from api import HOURS, MODEL, app, next_24_features  # noqa: E402
-from features import build_features  # noqa: E402
+from api import HOURS, MODEL, app, forecast  # noqa: E402
 
 client = app.test_client()
 
@@ -41,10 +38,14 @@ def test_predict_returns_24_values():
 
 
 def test_features_have_no_nans():
-    """Every feature row handed to the model must be complete."""
-    frame, start = next_24_features()
-    features = build_features(frame)
+    """Every feature row handed to the model must be complete.
 
-    upcoming = features.loc[start : start + (HOURS - 1) * pd.Timedelta(hours=1)]
-    assert len(upcoming) == HOURS
-    assert not upcoming.isna().any().any(), upcoming.isna().sum()
+    Walks the horizon the same way /predict does, because a future row's
+    rolling_mean_7d only exists after the previous hour has been predicted.
+    """
+    assert MODEL is not None, "run src/train.py before the tests: no model on disk"
+    _, features = forecast()
+
+    assert len(features) == HOURS
+    nan_counts = features.isna().sum()
+    assert not features.isna().any().any(), nan_counts[nan_counts > 0].to_dict()
