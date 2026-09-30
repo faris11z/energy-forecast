@@ -27,11 +27,6 @@ stages:
   features:
     cmd: python src/features.py
     deps:
-    - path: data/raw/load_weather.csv
-      hash: md5
-      md5: 4718973ff052a7b6dc8c5aaca564c464
-      size: 658910
-      isexec: true
     - path: params.yaml
       hash: md5
       md5: 21dce9d9a71b5c238f6674e27da3ab48
@@ -52,4 +47,72 @@ stages:
       hash: md5
       md5: 1a9adfc2eb2a35eaa9db3638152fb9cd
       size: 993159
+      isexec: true
+  train:
+    cmd: python src/train.py
+    deps:
+    - path: params.yaml
+      hash: md5
+      md5: 21dce9d9a71b5c238f6674e27da3ab48
+      size: 1531
+      isexec: true
+    - path: src/common.py
+      hash: md5
+      md5: 7e505e2f6ac86618a693a4e02fa94bbd
+      size: 3417
+      isexec: true
+    - path: src/features.py
+      hash: md5
+      md5: ee549dd83cbf3abae40dabf1f4c9777f
+      size: 3443
+      isexec: true
+    - path: src/train.py
+      hash: md5
+      md5: c9d4e3c28a6325c4b3565c93918f478f
+      size: 3717
+      isexec: true
+    outs:
+    - path: models/lgbm_load.txt
+      hash: md5
+      md5: 46b9031fa1919a3ad3c613bb5d809a07
+      size: 277317
+      isexec: true
+    - path: reports/train_metrics.json
+      hash: md5
+      md5: 583ee28e8fabc66510d436a526d03948
+      size: 877
+      isexec: true
+  evaluate:
+    cmd: python src/baseline.py && python src/evaluate.py
+    deps:
+    - path: params.yaml
+      hash: md5
+      md5: 21dce9d9a71b5c238f6674e27da3ab48
+      size: 1531
+      isexec: true
+    - path: src/baseline.py
+      hash: md5
+      md5: a7304baaeacf4779149c4fb5d3cb33f4
+      size: 1613
+      isexec: true
+    - path: src/common.py
+      hash: md5
+      md5: 7e505e2f6ac86618a693a4e02fa94bbd
+      size: 3417
+      isexec: true
+    - path: src/evaluate.py
+      hash: md5
+      md5: bd2aa5865ce5955e4aefc513ff008ef1
+      size: 1997
+      isexec: true
+    outs:
+    - path: metrics.json
+      hash: md5
+      md5: 4b6d316ff0faf58b7e3163ca327f53cc
+      size: 1872
+      isexec: true
+    - path: reports/baseline_metrics.json
+      hash: md5
+      md5: 24f16bfd77381c0d33ed28a8008d8721
+      size: 361
       isexec: true

@@ -262,3 +262,158 @@ WSL sandbox, not Windows. `python3 -m venv --without-pip` + `get-pip.py` was nee
 and `libgomp.so.1` is missing from the system image, so every command runs with
 `LD_LIBRARY_PATH=$PWD/.venv/lib`. Also: a real HTTP bind does not work in this
 sandbox (session 1 finding), so the API is exercised through the Flask test client.
+
+## Phase 1 - DVC PIPELINE (verified by running)
+
+dvc 3.67.1 installed, `dvc init` done, `dvc.yaml` + `params.yaml` written.
+All four stages reproduce: `dvc repro` runs ingest -> features -> train -> evaluate
+and writes `dvc.lock`, then a second run reports "Data and pipelines are up to date".
+Pipeline output is unchanged from session 1: test MAE 1,529.96 MW.
+
+`params.yaml` is now the single source of truth. src/common.py gained `load_params()`
+and `tracking_uri()`; train.py, baseline.py, ingest.py and features.py all read it.
+Verified: metrics are byte-identical before and after the refactor, and 3/3 pytest
+still pass, so the params change did not alter results.
+
+**Selective reruns: partially working, logged as a limitation.** Declaring
+`params.yaml` as a whole-file dep means any param change reruns all four stages,
+including the network download. I tried the per-key form
+(`- params.yaml: [model.num_leaves]`) and the nested-list YAML did not validate
+against DVC's schema; I reverted to the form that verifiably works rather than
+leave a broken pipeline. Confirmed behaviour: `num_leaves: 31 -> 48` reran
+ingest, features, train and evaluate. `dvc repro -s <stage>` is the workaround.
+
+**No remote configured, as instructed.** data/ and the artifacts are tracked by DVC;
+git only holds dvc.yaml, dvc.lock and .dvc/config.
+
+## Phase 2 - REGISTRY + PROMOTION GATE (verified by running, both paths)
+
+`src/promote.py`, registered name `energy-load-forecaster`, alias `production`,
+gate = 1% better test MAE (params.promote.min_improvement_pct). Tracking URI comes
+from `common.tracking_uri()`: `MLFLOW_TRACKING_URI` if set, else local ./mlruns, so
+switching to DagsHub needs no code change.
+
+| case | candidate MAE | production MAE | outcome |
+|------|--------------|----------------|---------|
+| no production model existed | 1,529.96 | none | **PROMOTED v2** |
+| deliberately bad model (1 tree, 300 rows) | 6,561.45 | 1,529.96 (v2) | **REJECTED v3**, alias stayed on v2 |
+
+The bad model was a real retrain of a deliberately crippled configuration, not a
+faked number, and the good model was restored afterwards. reports/promotion.json
+records both decisions with the reason string.
+
+Three real problems fixed while building it: MLflow's file-store gate (now set in
+common.tracking_uri so all modules share it), `mlflow.lightgbm.Booster` does not
+exist (it is `lightgbm.Booster`), and the file store rejects
+`order_by=["version desc"]` so the latest version is picked in Python instead.
+
+## Phase 3 - API SERVES FROM THE REGISTRY (verified by running)
+
+`app/api.py` loads `models:/energy-load-forecaster@production` and falls back to the
+local model file when the registry has no alias, so a fresh clone still works.
+/health now returns `model_source` describing exactly what is being served
+(`registry:...@production=v2` or `file:lgbm_load.txt`). The server binds to `$PORT`
+(7860 on a HF Space, 8000 locally). 3/3 pytest pass.
+
+## Phase 4 - DRIFT MONITORING (verified by running)
+
+`src/monitor.py`, evidently 0.7.23. Last 30 days vs the training window, per column,
+for temperature, wind, radiation and load, plus the recent-window prediction error.
+Wrote reports/drift.html (3.9 MB) and reports/drift.json. Threshold lives in
+params.yaml (drift.drifted_column_share = 0.25).
+
+Result: `drift_detected=true`, 3/4 columns drifted, recent MAE 1,490.58 MW.
+
+**This alert is a false positive and you should treat it as one.** The reference
+window is the whole training set, which spans all four seasons, while the current
+window is 30 days in September. Temperature and radiation are *supposed* to differ.
+The fix is a seasonal reference (same 30 days last year) rather than the full
+training set; I did not implement it because the timebox was gone. Until then the
+alert fires every September, so it will not wake you up for a real problem.
+
+I used Evidently for the HTML and scipy's KS test for the drift.json decision, on
+purpose: KS is the same test DataDriftPreset applies to numeric columns by default,
+but computing it directly keeps the JSON stable enough for the CI gate to depend on.
+Three API mismatches along the way (numeric_ vs numerical_, `definition` vs
+`data_definition`, and Dataset construction) cost about 10 minutes.
+
+## Phases 5, 6, 7 - WORKFLOWS AND DEPLOY (written, syntax-checked only)
+
+- `.github/workflows/ci.yml` - lint, fixture build, pytest, dvc.yaml validation,
+  docker build without push.
+- `.github/workflows/retrain.yml` - weekly cron + workflow_dispatch, dvc pull
+  (continue-on-error), dvc repro, promote, monitor, then a hard failure if
+  `drift_detected and not promoted`, plus report artifacts.
+- `.github/workflows/deploy.yml`, `space/Dockerfile`, `space/README.md` - HF Space
+  on port 7860, manual dispatch only, HF_TOKEN from secrets.
+
+All four YAML files parse with `yaml.safe_load` and the Space frontmatter was
+extracted and parsed. Nothing was pushed, logged into, or deployed, as instructed.
+
+I did not reproduce the CI job locally as a whole. What I did verify is the part
+that usually breaks: `tests/make_fixture_data.py` plus `pytest` on a throwaway copy
+of the repo with no data/ and no model/ -> 3 passed with no network access.
+
+## FINAL REPORT (session 2)
+
+**Start 15:31:41Z, wrap-up ~17:03Z. Overran the 60-minute box by about 30 minutes.**
+Cause: `pip install dvc evidently` took ~25 minutes on the Windows-mounted drive and
+ran in the background for most of the session, and one command hung for 53 minutes
+before returning. I kept starting work rather than idling, but the overrun is real.
+
+| phase | status |
+|-------|--------|
+| 1 DVC pipeline | **verified by running** (dvc repro, 4 stages, up-to-date on rerun) |
+| 2 Registry + promotion gate | **verified by running**, both paths (promote + reject) |
+| 3 API from registry | **verified by running** (3/3 pytest) |
+| 4 Drift monitoring | **verified by running** (drift.html + drift.json written) |
+| 5 CI workflow | **written, syntax-checked only** |
+| 6 Retrain workflow | **written, syntax-checked only** |
+| 7 HF Space deploy | **written, syntax-checked only** |
+| 8 Wrap-up | done |
+
+**`dvc repro`: passes.** 4 stages, `dvc.lock` written, second run reports up to date,
+metrics unchanged from session 1 (test MAE 1,529.96 MW).
+**`pytest -q`: 3 passed**, both against the real data and against a clean offline copy.
+
+**Promotion gate, both cases observed:**
+- no production model -> PROMOTED v2 (1,529.96 MW)
+- bad model 6,561.45 MW vs production 1,529.96 MW -> REJECTED v3, alias stayed on v2
+
+**Files created:** params.yaml, dvc.yaml, dvc.lock, .dvc/, src/promote.py,
+src/evaluate.py, src/monitor.py, tests/conftest.py, tests/make_fixture_data.py,
+.github/workflows/{ci,retrain,deploy}.yml, space/{Dockerfile,README.md}
+**Files changed:** src/common.py (load_params, tracking_uri, params-driven split),
+src/features.py (params-driven lags, __main__), src/train.py (params + processed
+artifact), src/baseline.py, src/ingest.py, app/api.py (registry load, $PORT),
+.gitgitignore
+**Untracked from git (files kept on disk):** reports/train_metrics.json,
+reports/baseline_metrics.json - DVC now owns them. 3 commits on `agent-run-2`.
+
+**Decisions and assumptions**
+1. `params.yaml` is the only place to change splits, hyperparams, the gate and the
+   drift threshold; every script reads it through common.load_params().
+2. DVC tracks data/ and the model artifacts; git keeps only dvc.yaml/dvc.lock/config.
+   No remote configured, as instructed.
+3. A rejected model is still logged as a version, so it can be compared later. The
+   alias simply does not move.
+4. The API falls back to the local model file so a fresh clone works before anything
+   is promoted. /health says which source is live.
+5. Evidently renders the report; the drift.json decision uses scipy KS, the same
+   test Evidently applies by default, so CI depends on JSON rather than HTML.
+6. The drift reference window is the whole training set. That is what makes the
+   current alert a seasonal false positive; logged above, not fixed.
+7. CI never touches the network: conftest replaces the weather call and
+   make_fixture_data.py builds synthetic data. Verified offline in a throwaway copy.
+8. secrets are referenced only as `${{ secrets.* }}`; no login, push or deploy was
+   attempted.
+9. WSL carry-over: every command needs `LD_LIBRARY_PATH=$PWD/.venv/lib` for libgomp.
+
+**My manual checklist, in order**
+1. Create the DagsHub repo; `dvc remote add origin <url>`; `dvc push`.
+2. Add GitHub secrets: `DAGSHUB_TOKEN`, `MLFLOW_TRACKING_URI`, `HF_TOKEN`.
+3. `python src/promote.py` once locally, so a `production` alias exists.
+4. Create the HF Space (Docker, port 7860), then run the deploy workflow.
+5. Run the retrain workflow once via workflow_dispatch and watch the artifacts.
+6. Only then enable the schedule and trust the alerts, after fixing the seasonal
+   drift reference in src/monitor.py.

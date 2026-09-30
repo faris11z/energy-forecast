@@ -1,0 +1,39 @@
+{
+  "drift_detected": true,
+  "drifted_column_share": 0.75,
+  "threshold": 0.25,
+  "drifted_columns": [
+    "temperature_2m",
+    "shortwave_radiation",
+    "load_mw"
+  ],
+  "columns": {
+    "temperature_2m": {
+      "ks_statistic": 0.5347294342716589,
+      "p_value": 1.7472056832697435e-174,
+      "drifted": true
+    },
+    "wind_speed_10m": {
+      "ks_statistic": 0.04801706598645654,
+      "p_value": 0.09396669037673477,
+      "drifted": false
+    },
+    "shortwave_radiation": {
+      "ks_statistic": 0.10729517779599762,
+      "p_value": 5.004246974008729e-07,
+      "drifted": true
+    },
+    "load_mw": {
+      "ks_statistic": 0.1998846072090129,
+      "p_value": 2.0323033578317786e-23,
+      "drifted": true
+    }
+  },
+  "reference_rows": 7318,
+  "current_rows": 720,
+  "prediction_error": {
+    "available": true,
+    "mae_mw": 1490.58,
+    "window_days": 30
+  }
+}

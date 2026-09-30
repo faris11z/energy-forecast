@@ -91,9 +91,14 @@ def write_html(reference: pd.DataFrame, current: pd.DataFrame) -> bool:
         print(f"evidently not available ({error}), skipping reports/drift.html")
         return False
 
-    definition = DataDefinition(numeric_columns=MONITORED_COLUMNS)
-    current_data = Dataset.from_pandas(current.reset_index(), definition=definition)
-    reference_data = Dataset.from_pandas(reference.reset_index(), definition=definition)
+    # Evidently 0.7 takes the frames directly; the explicit Dataset objects are
+    # only needed when a DataDefinition has to be attached per column.
+    current_data = Dataset.from_pandas(
+        current.reset_index(), data_definition=DataDefinition(numerical_columns=MONITORED_COLUMNS)
+    )
+    reference_data = Dataset.from_pandas(
+        reference.reset_index(), data_definition=DataDefinition(numerical_columns=MONITORED_COLUMNS)
+    )
     snapshot = Report([DataDriftPreset()]).run(
         current_data=current_data, reference_data=reference_data
     )

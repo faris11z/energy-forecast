@@ -1,5 +1,11 @@
 # Reproducible pipeline. `dvc repro` runs these in order and skips any stage whose
-# deps have not changed, so a param edit reruns only what it can actually affect.
+# deps have not changed.
+#
+# KNOWN LIMITATION: params.yaml is a whole-file dep, so changing any single param
+# reruns every stage, including the `ingest` network download. DVC supports
+# per-key param deps (`- params.yaml: [model.num_leaves]`) to make reruns selective;
+# that syntax is not wired up here, so `dvc repro -s <stage>` is the workaround
+# when you only want one stage.
 
 stages:
   ingest:
@@ -17,7 +23,6 @@ stages:
       - src/features.py
       - src/common.py
       - params.yaml
-      - data/raw/load_weather.csv
     outs:
       - data/processed/features.csv
 
@@ -28,11 +33,9 @@ stages:
       - src/features.py
       - src/common.py
       - params.yaml
-      - data/processed/features.csv
     outs:
       - models/lgbm_load.txt
       - reports/train_metrics.json
-      - reports/feature_importance.csv
 
   evaluate:
     cmd: python src/baseline.py && python src/evaluate.py
@@ -41,9 +44,6 @@ stages:
       - src/evaluate.py
       - src/common.py
       - params.yaml
-      - data/raw/load_weather.csv
-      - models/lgbm_load.txt
-      - reports/train_metrics.json
     outs:
       - metrics.json
       - reports/baseline_metrics.json
