@@ -497,3 +497,69 @@ worse-model, promote-a-genuinely-better-model.
 - `src/track.py`, `src/promote.py`, `src/monitor.py`: all run clean in sequence
 - API serves the registry version
 - Workflows: syntax-checked only, still cannot be run without credentials
+
+---
+
+# Session 3b - closing the loose ends (agent-run-2, continued)
+
+**Start 18:27Z.** Follow-up pass on the gaps I flagged when closing session 3,
+plus a hunt for problems I had *not* been looking for.
+
+## 1. The secret I had introduced but not documented
+
+`retrain.yml` now reads `DAGSHUB_REMOTE_URL`, but the README setup checklist still
+listed only `DAGSHUB_TOKEN` / `MLFLOW_TRACKING_URI` / `HF_TOKEN`. Someone following
+the README would have configured the token and never the remote URL, and the
+retrain workflow would have silently run on freshly downloaded data. Documented,
+including the reason the token is not part of the URL.
+
+## 2. Things I checked that turned out to be fine
+
+Worth recording, because these were the plausible-looking bugs:
+
+- **`models/` is gitignored but DVC-owned.** `git ls-files models/` is empty, which
+  looked like the API would have no model on a fresh checkout. It does not:
+  `models/lgbm_load.txt` is declared as an output of the DVC `train` stage, so
+  `dvc pull` restores it. This is the correct pattern, not a bug.
+- **`deploy.yml` never runs `src/features.py`.** Also looked fatal. It is not:
+  `src/train.py:59-62` falls back to `build_xy(frame)` when the processed table is
+  absent, which was deliberate from session 1.
+- **The Space has no `mlruns/`.** Also fine. The API falls back to
+  `models/lgbm_load.txt`, which is exactly what the fallback is for.
+
+## 3. Two real bugs, both small
+
+- **`deploy.yml` called `python -m dvc pull` without installing `dvc`.** It did not
+  fail loudly - the `|| echo` swallowed `ModuleNotFoundError` and printed "no DVC
+  remote, using local data", which was a false explanation. Now installs `dvc` and
+  the warning says what it means.
+- **`requirements.txt` had no upper bounds**, so `mlflow>=2.14` and `pandas>=2.2`
+  would both accept a future breaking major and turn CI red for reasons unrelated to
+  any change here. Added bounds that encode the majors actually tested against
+  (mlflow 3.16, pandas 3.0, numpy 2.5, sklearn 1.9, lightgbm 4.7). Patch releases
+  still float, so these are not exact pins. Verified every installed version is
+  inside its bound.
+
+## 4. The limitation that matters most, and I cannot fix it
+
+Local development is **Python 3.14**. CI (`ci.yml`) and the Space image
+(`space/Dockerfile`, `python:3.11-slim`) are **3.11**. So every number in this
+project - the 22.7% improvement, the 6 passing tests, the promotion gate - was
+measured on a Python version that does not ship.
+
+I checked whether I could close this: no other interpreter is installed in this
+environment, and Docker is still unavailable in the WSL distro. There is no honest
+way to verify 3.11 from here. It is now written down as the first entry under
+"Known limitations" rather than left implicit, because the first `ci.yml` run is
+the actual test of it and that should be a surprise to nobody.
+
+Also noted: the Space image installs the full `requirements.txt`, `pytest`
+included, which it has no use for.
+
+## Verification status
+
+- `pytest -q`: 6 passed
+- All three workflows parse; every `requirements.txt` bound contains the installed
+  version
+- `pytest` still green after the requirements change, so the bounds did not
+  accidentally exclude anything in use

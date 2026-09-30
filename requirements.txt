@@ -1,11 +1,19 @@
-# Runtime dependencies, pinned to major versions only.
-# Install with: pip install -r requirements.txt
-pandas>=2.2
-numpy>=1.26
-scikit-learn>=1.4
-lightgbm>=4.3
-holidays>=0.45
-flask>=3.0
-mlflow>=2.14
-requests>=2.31
-pytest>=8.0
+# Runtime dependencies.
+#
+# Upper bounds are deliberate. These encode the major versions this project has
+# actually been tested against (mlflow 3.16, pandas 3.0, numpy 2.5, sklearn 1.9,
+# lightgbm 4.7), so a future breaking major cannot turn CI or the Space image red
+# without anyone deciding to move. They are not exact pins: patch releases still
+# float.
+#
+# Note the environments differ. Local development is Python 3.14; CI and the
+# Hugging Face image are 3.11. See README "Known limitations".
+pandas>=2.2,<4
+numpy>=1.26,<3
+scikit-learn>=1.4,<2
+lightgbm>=4.3,<5
+holidays>=0.45,<1
+flask>=3.0,<4
+mlflow>=2.14,<4
+requests>=2.31,<3
+pytest>=8.0,<10

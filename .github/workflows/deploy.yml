@@ -32,11 +32,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt dvc
 
       - name: Prepare the model
         run: |
-          python -m dvc pull -q || echo "no DVC remote, using local data"
+          # dvc is installed above but there may still be no remote configured, in
+          # which case ingest.py downloads fresh. Both paths produce the two
+          # gitignored files the Space needs.
+          python -m dvc pull -q 2>/dev/null || echo "::warning::no DVC data pulled, the ingest step will download fresh"
           python src/ingest.py
           python src/train.py
 

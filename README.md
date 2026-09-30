@@ -93,6 +93,11 @@ Nothing below is automated yet, and none of it can be done from CI without you.
    Retrieve an access token from DagsHub under Settings -> Access Tokens.
 3. **Add GitHub repository secrets** (Settings -> Secrets and variables -> Actions):
    - `DAGSHUB_TOKEN` - the DagsHub token from step 2
+   - `DAGSHUB_REMOTE_URL` - e.g. `https://dagshub.com/<user>/<repo>.dvc`. The token
+     is deliberately *not* part of this URL, because `.dvc/config` is committed to
+     git. `retrain.yml` reads this to run `dvc remote add`, which is what lets a
+     fresh CI checkout fetch versioned data instead of silently re-downloading from
+     the public APIs. Without it that workflow still runs, on fresh data.
    - `MLFLOW_TRACKING_URI` - e.g. `https://dagshub.com/<user>/<repo>.mlflow`
    - `HF_TOKEN` - a Hugging Face write token, needed only for deploys
 4. **Point MLflow at DagsHub locally** to test the same code path:
@@ -130,6 +135,13 @@ dvc dag                   # the graph above, from the real pipeline
   false` rather than reporting a meaningless number.
 - `dvc push`, the retrain workflow and the Space deploy were never executed against
   a real remote; they are syntax-checked only.
+- **The tested Python is not the deployed Python.** Everything here was verified on
+  3.14, but CI and the Space image are 3.11. `requirements.txt` bounds the majors so
+  a new breaking version cannot appear, but no 3.11 run has actually happened yet.
+  The first `ci.yml` run is the real test of this.
+- The Space image installs the full `requirements.txt`, including `mlflow` and
+  `pytest`, so it is larger than it needs to be. `mlflow` is required (the API
+  prefers the registry alias), but `pytest` is not and could be dropped.
 
 ## Data sources
 
