@@ -37,3 +37,9 @@ models/
 reports/train_metrics.json
 reports/baseline_metrics.json
 /metrics.json
+
+# 3.7MB generated Evidently report, rewritten by every monitor.py run. Tracked from
+# session 1 by mistake: history already held ~11MB across 12 blobs and each weekly
+# run added another, none of it reclaimable. The signal CI gates on is
+# reports/drift.json (4KB), which stays tracked.
+/reports/drift.html

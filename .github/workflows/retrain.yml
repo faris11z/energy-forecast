@@ -115,13 +115,24 @@ jobs:
               sys.exit(1)
           PY
 
+      # Diagnostics, not a deliverable. The real outputs already reached DagsHub by
+      # this point: data via `dvc push`, runs and the promoted model via MLflow. So a
+      # flaky artifact service must not be able to fail an otherwise good retrain.
+      # This step has `continue-on-error` because Azure blob storage returned
+      # "Error: The server is busy" on a run where every pipeline step had succeeded.
       - name: Upload reports and metrics
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: retrain-reports
+          # Listed explicitly rather than uploading reports/. drift.html is a 3.7 MB
+          # generated Evidently report that was the entire upload payload; the
+          # machine-readable outputs that the gate above actually reads total ~12 KB.
           path: |
-            reports/
+            reports/drift.json
+            reports/promotion.json
+            reports/feature_importance.csv
             metrics.json
             dvc.lock
           retention-days: 30

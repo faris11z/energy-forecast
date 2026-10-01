@@ -136,7 +136,7 @@ Nothing below is automated yet, and none of it can be done from CI without you.
 ```powershell
 dvc repro                 # ingest -> features -> train -> evaluate
 python src\promote.py     # registry + 1% gate
-python src\monitor.py     # reports/drift.html + reports/drift.json
+python src\monitor.py     # reports/drift.json (+ drift.html, gitignored, 3.7 MB)
 python app\api.py         # http://localhost:8000
 pytest -q                 # 6 tests, offline, no external calls
 dvc dag                   # the graph above, from the real pipeline

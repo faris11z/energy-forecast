@@ -871,3 +871,64 @@ the 3.7 MB the workflow tried to upload.
 Not changed yet. Untracking it means losing the ability to read a past report from
 git, though the *machine-readable* signal that CI gates on (`drift.json`, 4 KB)
 stays tracked either way.
+
+## Session 3h - the artifact upload was the bug (agent-run-2)
+
+The retrain failure was:
+
+    Error: The server is busy.
+    RequestId:8f5e5f11-801e-00e7-0b92-51355b000000
+
+Azure blob storage, from `actions/upload-artifact@v4`. Transient, infrastructure,
+nothing to do with the pipeline. But it exposed two real design faults.
+
+### Fault 1: the least reliable step decided pass/fail
+
+`Upload reports and metrics` was the final step, so it decided the job result. That
+step is diagnostics. By the time it runs, every real output has already landed
+elsewhere - data in DagsHub via `dvc push`, runs and the promoted model via MLflow.
+A flaky storage service must not be able to fail an otherwise good retrain, so the
+step now has `continue-on-error: true`.
+
+### Fault 2: the upload was 3.7 MB, all of it one generated file
+
+    reports/drift.html   3.7M
+    everything else     12K
+
+Evidently renders a self-contained HTML report with inlined assets, and it was the
+entire payload. Now the upload lists files explicitly - the machine-readable outputs
+the gate actually reads - dropping it to ~12 KB. Smaller uploads fail less often, so
+this reduces the chance of recurrence rather than only ignoring the symptom.
+
+### Also untracked reports/drift.html
+
+12 blobs, 3 of them ~3.86 MB: ~11.6 MB of history for a generated file, growing
+~200 MB/year at one run a week, none reclaimable. `git rm --cached`, files still on
+disk, `/reports/drift.html` ignored. `reports/drift.json` - the signal the
+notification gate reads - stays tracked at 4 KB.
+
+History is not rewritten. 11.6 MB is not worth force-pushing a branch that is
+actively being run in CI.
+
+## Verified against the live DagsHub registry
+
+While I was in there, checked what CI's promotion gate will actually see:
+
+    production v1   test_mae_mw=1435.08   status=READY
+    runs in exp 0:  5
+
+So the failed run had in fact completed steps 4-8: DVC remote configured, data
+pulled, pipeline repro'd, runs logged to DagsHub, and the gate **promoted v1 at
+1435.08 MW**. Only the upload failed. That is the evidence behind the
+`continue-on-error` change - the pipeline was never broken, the reporting was.
+
+`baseline` differs between the CI run (1827.81) and mine (1860.29) because
+`dvc repro -f` re-ingests and the window shifts. Expected, not drift.
+
+## Verification status
+
+- `ruff check src app tests`: clean
+- All three workflows parse; upload step confirmed `continue-on-error: true`
+  with the 5 explicit paths
+- `pytest -q`: 9 passed
+- `reports/drift.html` still on disk after `git rm --cached`
