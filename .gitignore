@@ -24,6 +24,12 @@ __pycache__/
 # Trained model artifact: regenerate with src/train.py, keeps the repo small
 models/
 
+# Extracted .deb packages (libgomp1 and friends) pulled in during setup. The
+# runtime that matters is already vendored at .venv/lib/libgomp.so.1, which is
+# what LD_LIBRARY_PATH points at. This is 500KB of extracted Linux binaries that
+# mean nothing on any other platform.
+/.native/
+
 # DVC versioned data and artifacts
 .dvc/cache
 
