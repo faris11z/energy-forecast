@@ -1,0 +1,15 @@
+# Pipeline tooling, deliberately separate from requirements.txt.
+#
+# requirements.txt is what the Hugging Face image installs, and the API only needs
+# to serve predictions. DVC pulls in a large dependency tree that nothing uses at
+# request time, so it stays out of the runtime dependencies.
+#
+# dvc-s3 is a separate line because DVC 3.x moved S3 support out of core into a
+# plugin. Without it, an s3:// remote fails with:
+#   "s3 is supported, but requires 'dvc-s3' to be installed"
+# That is not theoretical: it is what happened the first time this remote was used.
+#
+# Workflows install both files, so this list is the single place the pipeline
+# dependencies are declared.
+dvc>=3.0,<4
+dvc-s3>=3.0,<4

@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt dvc
+          pip install -r requirements.txt -r requirements-pipeline.txt
 
       - name: Prepare the model
         run: |

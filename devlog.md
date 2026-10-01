@@ -621,3 +621,78 @@ same: reasoned from DagsHub's documented auth model, not observed failing.
 - No workflow or doc still references the removed `DAGSHUB_REMOTE_URL`
 - Token appears only in `--local` modify lines
 - `pytest` not re-run this session: no Python changed
+
+---
+
+# Session 3d - the dvc-s3 bug (agent-run-2, continued)
+
+**Start 18:44Z.** `dvc push` to DagsHub worked on the first real attempt, which
+settled the thing I said could not be verified locally: the token **does** work when
+used as both `access_key_id` and `secret_access_key`. The remote is live.
+
+## A bug I shipped
+
+Configuring the remote failed immediately:
+
+```
+ERROR: unexpected error - s3 is supported, but requires 'dvc-s3' to be installed
+```
+
+DVC 3.x moved S3 support out of core into a plugin. I had recommended the
+S3-compatible remote in session 3c and written it into `retrain.yml` without
+checking that the URL scheme I chose needed a package that was not installed.
+
+Worth being precise about the tradeoff I recommended without noticing:
+`dvc-http` *is* already installed, so the legacy `.dvc` URL I originally wrote would
+have needed no extra package at all. Switching to S3 bought cleaner `--local`
+credential handling and a documented-current API, and cost one dependency. Still the
+right trade, but I did not know the price when I sold it.
+
+Scope of the damage, checked rather than assumed:
+
+| workflow | effect |
+|---|---|
+| `retrain.yml` | broken outright - `s3://dvc` unusable |
+| `deploy.yml` | worse - same error swallowed by `\|\| echo`, then silently re-ingested |
+| `ci.yml` | unaffected, only reads `dvc.yaml` as text |
+
+The silver lining is that it failed loudly at `Configure the DVC remote`, before any
+download or training, rather than quietly producing a pipeline with no data.
+
+## Fix: one file instead of two copies of an install line
+
+The defect existed because `pip install -r requirements.txt dvc` was hand-copied
+into `retrain.yml` and `deploy.yml`. Nothing kept them in sync and nothing listed the
+plugin. So new `requirements-pipeline.txt` holds `dvc` + `dvc-s3`, and all three
+workflows now install from it:
+
+    pip install -r requirements.txt -r requirements-pipeline.txt
+
+`ci.yml` does not strictly need DVC either, and still installs it. Deliberate: CI
+runs on every push, so it is where a broken pipeline-deps file surfaces
+immediately, instead of on the weekly retrain at 04:17 on a Monday with nobody
+watching.
+
+`requirements.txt` is untouched. DVC is not needed to serve predictions and must not
+inflate the Space image.
+
+## Also committed: .dvc/config
+
+`dvc push` left `.dvc/config` modified, which is correct rather than accidental. It
+now records the public remote (`s3://dvc` plus the DagsHub endpoint) and should be
+versioned so CI's `dvc remote remove` has something defined to remove.
+
+Checked before committing, because this file is tracked by git:
+
+- `.dvc/config` contains only the URL and endpoint - **0** token-like strings
+- `.dvc/config.local` holds the credentials and is covered by `.dvc/.gitignore`
+- `git check-ignore` confirms config.local is ignored
+
+Same discipline as `git config --local` versus `--global`: anything committed has to
+be safe to publish.
+
+## Verification status
+
+- All three workflows still parse
+- `.dvc/config` verified free of credentials before staging
+- No Python changed, so pytest was not re-run

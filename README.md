@@ -95,6 +95,16 @@ Nothing below is automated yet, and none of it can be done from CI without you.
    dvc push                  # first upload of data/
    ```
    Retrieve an access token from DagsHub under your avatar -> Access Tokens.
+
+   Two notes, both learned the hard way:
+
+   - `s3://` remotes need the `dvc-s3` plugin, which DVC 3.x split out of core.
+     `pip install dvc-s3` or you get
+     `s3 is supported, but requires 'dvc-s3' to be installed`. Pipeline
+     dependencies live in `requirements-pipeline.txt`, not `requirements.txt`.
+   - Run `dvc remote list` afterwards. Then check `git status`: `.dvc/config`
+     changing is correct and should be committed, but `.dvc/config.local` must
+     never appear there. That file holds your token and is gitignored.
 3. **Add one GitHub repository secret** (Settings -> Secrets and variables -> Actions):
    - `DAGSHUB_TOKEN` - the DagsHub token from step 2
 
