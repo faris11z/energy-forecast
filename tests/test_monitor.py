@@ -14,7 +14,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from monitor import (  # noqa: E402
+from monitor import (
     REFERENCE_LAG_DAYS,
     per_column_drift,
     reference_window,

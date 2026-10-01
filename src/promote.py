@@ -76,8 +76,10 @@ def decide(new_mae: float, old_mae: float | None) -> tuple[bool, str]:
     direction = "better" if improvement >= 0 else "worse"
     return (
         False,
-        f"MAE is {abs(improvement):.2f}% {direction}, below the "
-        f"{MIN_IMPROVEMENT_PCT}% gate, keeping the current production model",
+        (
+            f"MAE is {abs(improvement):.2f}% {direction}, below the "
+            f"{MIN_IMPROVEMENT_PCT}% gate, keeping the current production model"
+        ),
     )
 
 

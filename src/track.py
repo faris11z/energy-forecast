@@ -8,7 +8,6 @@ Run after src/baseline.py and src/train.py have written reports/*.json.
 """
 
 import json
-from pathlib import Path
 
 import lightgbm as lgb
 import mlflow

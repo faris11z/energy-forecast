@@ -769,3 +769,55 @@ surfaced at the very end of `main()`.
 - DagsHub MLflow: auth verified, runs land remotely
 - Local `mlruns` path: still works
 - `requirements-pipeline.txt`: installed locally, so local and CI now match
+
+---
+
+# Session 3f - first CI run (agent-run-2, continued)
+
+**Start 19:04Z.** The first `ci.yml` run: 13 ruff errors, exit 1. Ruff had never
+been run locally - it is installed in CI but not in the venv, so nothing in this
+project had ever been linted before. Two useful facts fell out.
+
+**No ruff config exists anywhere.** No `pyproject.toml`, no `ruff.toml`, nothing in
+any parent directory, nothing in `~/.config`. So all 13 errors were ruff's defaults.
+That is worth recording because it means CI enforces no project style of its own;
+nothing here was ever a deliberate choice.
+
+## Breakdown
+
+| rule | count | whose fault |
+|---|---:|---|
+| RUF100 unused `noqa: E402` | 6 | stale directives from session 1; E402 is not in the default rule set |
+| I001 unsorted imports | 2 | one from session 1, one from my session 3d |
+| RUF046 `int(len(...))` | 2 | mine, session 3d |
+| F401 unused import | 1 | mine - I left `from pathlib import Path` in `track.py` when rewriting it |
+| ISC004 implicit string concat | 1 | session 1, needed judgement |
+| PLW1508 bad envvar default | 1 | session 1, a genuine bug |
+
+So five of thirteen were mine, which is about the rate expected given that ruff had
+never run on code I wrote.
+
+## The one real bug
+
+`app/api.py:210` read `os.environ.get("PORT", 8000)` - an int default on a call that
+returns `str`. It worked anyway, because `int(8000)` and `int("7860")` both succeed,
+so the bug was invisible until a linter read the type contract. That is the exact
+shape of defect that only surfaces later, on the Space, as something subtle. Fixed
+to `os.environ.get("PORT", "8000")`.
+
+## Why `int(len(...))` was fine to remove
+
+Ruff stripped two `int(len(x))` casts in `monitor.py`. I checked rather than assumed:
+`len()` already returns `int`, and the value goes into `drift.json`, which needs a
+JSON number. Verified after the change - both fields still serialise as `int`
+(720 / 720), not strings. No behavioural difference.
+
+## Verified after the fixes
+
+- `ruff check src app tests`: all checks passed
+- `pytest -q`: 9 passed
+- `track.py`, `promote.py`, `monitor.py` all still run; `drift_detected: false`,
+  `reference_rows: 720` as an int
+
+Still unverified: **Python 3.11**. This run failed on lint, not on the interpreter,
+so that remains open.

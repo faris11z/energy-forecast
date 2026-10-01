@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "app"))
 
-from api import HOURS, MODEL, app, forecast  # noqa: E402
+from api import HOURS, MODEL, app, forecast
 
 client = app.test_client()
 

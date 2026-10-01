@@ -16,7 +16,7 @@ import pandas as pd
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import load_params  # noqa: E402
+from common import load_params
 
 # 365 days of hourly data gives 8760 rows, the ~8700 the project expects.
 DAYS = load_params()["data"]["ingest_days"]

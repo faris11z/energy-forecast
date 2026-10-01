@@ -22,8 +22,8 @@ from flask import Flask, jsonify
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from common import MODEL_PATH, load_raw, tracking_uri  # noqa: E402
-from features import TARGET, build_features  # noqa: E402
+from common import MODEL_PATH, load_raw, tracking_uri
+from features import TARGET, build_features
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 CITIES = {
@@ -207,4 +207,4 @@ if __name__ == "__main__":
     # PORT is set by the hosting platform (7860 on a Hugging Face Space); 8000
     # locally. Reading it from the environment is what makes the same image work
     # in both places.
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))

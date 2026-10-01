@@ -51,9 +51,10 @@ def build_frame() -> pd.DataFrame:
 
 
 def main() -> None:
+    import lightgbm as lgb
+
     from common import MODEL_PATH, RAW_CSV, load_raw, split_time
     from features import build_xy
-    import lightgbm as lgb
 
     RAW_CSV.parent.mkdir(parents=True, exist_ok=True)
     build_frame().to_csv(RAW_CSV)

@@ -181,8 +181,8 @@ def main() -> None:
             current.index[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
             current.index[-1].strftime("%Y-%m-%dT%H:%M:%SZ"),
         ],
-        "reference_rows": int(len(reference)),
-        "current_rows": int(len(current)),
+        "reference_rows": len(reference),
+        "current_rows": len(current),
         "prediction_error": accuracy,
     }
 

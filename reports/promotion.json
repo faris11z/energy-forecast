@@ -1,12 +1,12 @@
 {
-  "checked_at_utc": "2026-09-30T18:21:34Z",
+  "checked_at_utc": "2026-10-01T10:05:36Z",
   "new_model_mae_mw": 1438.5358288816883,
-  "production_mae_mw": 1529.961255515568,
-  "production_version": 2,
+  "production_mae_mw": 1438.5358288816883,
+  "production_version": 4,
   "min_improvement_pct": 1.0,
-  "promoted": true,
-  "reason": "MAE 5.98% better, above the 1.0% gate",
-  "improvement_pct": 5.97566940367199,
-  "candidate_version": 4,
+  "promoted": false,
+  "reason": "MAE is 0.00% better, below the 1.0% gate, keeping the current production model",
+  "improvement_pct": 0.0,
+  "candidate_version": 5,
   "promoted_version": 4
 }

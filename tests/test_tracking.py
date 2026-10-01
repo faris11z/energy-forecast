@@ -14,11 +14,10 @@ So this test asserts the *wiring*, cheaply, without contacting a server.
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-import common  # noqa: E402
+import common
 
 
 def test_tracking_uri_defaults_to_local_store(monkeypatch):
