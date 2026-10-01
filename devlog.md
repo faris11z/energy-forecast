@@ -821,3 +821,53 @@ JSON number. Verified after the change - both fields still serialise as `int`
 
 Still unverified: **Python 3.11**. This run failed on lint, not on the interpreter,
 so that remains open.
+
+---
+
+# Session 3g - untracking .native, and a bigger problem found next to it (agent-run-2)
+
+**Start 19:22Z.** After the first CI run passed and `retrain.yml` failed on a
+transient Azure blob error, the user noticed `.native/` still showing as tracked.
+
+## The .gitignore rule was correct and did nothing
+
+`.gitignore` has had `/.native/` since `bea2b3f`. But `git check-ignore` reported the
+files as *not* ignored, which looked like a broken rule. It was not:
+
+    git check-ignore -v --no-index .native/.../libgomp.so.1
+    .gitignore:31:/.native/   .native/extracted/usr/lib/x86_64-linux-gnu/libgomp.so.1
+
+`git check-ignore` skips paths that are in the index unless given `--no-index`. The
+rule matched all along. The four files were committed in session 1 (`9e04dc9`),
+before the rule existed, and **gitignore does nothing for files already tracked**.
+Fixed with `git rm -r --cached .native`; all four remain on disk and LightGBM still
+imports, because `LD_LIBRARY_PATH` points at `.venv/lib`, not here.
+
+A caution about my own verification: after the `rm` I checked with
+`find .native -type f` and two entries appeared to have vanished. They had not -
+they are symlinks (`libgomp.so.1 -> libgomp.so.1.0.0`, `libgomp1 -> gcc-14-base`)
+and `-type f` skips those. Re-checked with `-type l`. Nothing was deleted, but the
+first check was wrong and would have been alarming if I had not looked twice.
+
+## The bigger problem: reports/drift.html is 3.7 MB and tracked
+
+Found while auditing for other binaries. It is a generated Evidently report, tracked
+in git, rewritten by every `monitor.py` run. History already holds **12 blobs, three
+of them ~3.86 MB - about 11.6 MB of history for a file nobody reads in git.**
+
+At one monitor run per week that is roughly **200 MB of history per year**, and none
+of it can be garbage collected, because git only keeps whole blobs and each run
+produces a new one.
+
+Contrast with how the rest of the project handles generated files:
+`reports/train_metrics.json` and `reports/baseline_metrics.json` are gitignored
+because DVC owns them, and `data/`, `models/`, `mlruns/` are all ignored. The HTML
+report is the one generated artifact that got committed - the same oversight as
+`.native`, just bigger and still growing.
+
+This also explains the artifact-upload failure: `reports/drift.html` was 3.7 MB of
+the 3.7 MB the workflow tried to upload.
+
+Not changed yet. Untracking it means losing the ability to read a past report from
+git, though the *machine-readable* signal that CI gates on (`drift.json`, 4 KB)
+stays tracked either way.
