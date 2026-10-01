@@ -696,3 +696,76 @@ be safe to publish.
 - All three workflows still parse
 - `.dvc/config` verified free of credentials before staging
 - No Python changed, so pytest was not re-run
+
+---
+
+# Session 3e - the bug that only a real run could find (agent-run-2, continued)
+
+**Start 18:52Z.** The user had run `dvc push` and the DagsHub token was sitting in
+`.dvc/config.local`, which meant the two things I had flagged as "cannot be verified
+locally" could finally be verified. Both were worth checking.
+
+## Verified: the DagsHub integration
+
+- `dvc-s3` 3.3.0 installs cleanly alongside DVC 3.67.1, no conflict
+- `dvc pull` over the real S3 endpoint: "Everything is up to date", `dvc status`
+  clean. The S3 remote works with the token used as both keys.
+- MLflow auth to `dagshub.com/faris11z/energy-forecast.mlflow`: **accepted**. This
+  was the last unverified link in the chain, and it works.
+
+## The bug: track.py ignored MLFLOW_TRACKING_URI
+
+Logging runs to DagsHub printed:
+
+    mlflow runs written to /mnt/d/Projects/energy-forecast/mlruns
+
+It had written **locally**, despite `MLFLOW_TRACKING_URI` being set to DagsHub.
+
+`src/track.py:35` called `mlflow.set_tracking_uri(TRACKING_DIR.as_uri())` against a
+hardcoded module constant. `promote.py` and `app/api.py` both used
+`common.tracking_uri()`, which reads the environment. `track.py` was the only module
+that ignored it - and its own docstring said "DagsHub comes later".
+
+This is the worst class of bug in the whole project, because it is invisible in
+local use. Set the env var, nothing appears to change, runs land in `./mlruns`
+exactly as before. But in CI it breaks the pipeline in a way that looks like
+something else:
+
+1. `Log runs to MLflow` writes to the runner's disk, which is discarded
+2. `promote.py` correctly queries DagsHub and finds **no runs**
+3. The promotion gate then fails, or silently promotes nothing
+
+The workflow would have reported a misleading failure in the gate step, pointing
+away from the actual cause. Fixed: `track.py` now uses `common.tracking_uri()`, and
+only sets `MLFLOW_ALLOW_FILE_STORE` when the URI is actually a local file store -
+that flag is harmless against a remote server but only needed for the local one.
+
+Verified both paths after the fix: local mode still writes to `./mlruns`, DagsHub
+mode now produces real runs at
+`dagshub.com/faris11z/energy-forecast.mlflow` (experiment 0, baseline + lightgbm).
+
+## Regression guard
+
+New `tests/test_tracking.py`, 3 tests: the URI defaults to the file store, follows
+the environment, and `track.py` does not hardcode a store. Deliberately a source
+assertion rather than a live log, because logging takes minutes and needs a server
+while the mistake is structural.
+
+I also wrote a fourth test that checked these modules read the env var, then deleted
+it: it ended in `or module == "promote"`, which made it pass unconditionally. A test
+that cannot fail is worse than no test, since it inflates the count while providing
+no protection. Suite is 9, not 12.
+
+## Also fixed
+
+A `NameError: TRACKING_DIR` I introduced while removing the constant - caught because
+the run printed the traceback. The runs had already been logged, which is why it only
+surfaced at the very end of `main()`.
+
+## Verification status
+
+- `pytest -q`: 9 passed
+- DagsHub S3 remote: pull verified end to end
+- DagsHub MLflow: auth verified, runs land remotely
+- Local `mlruns` path: still works
+- `requirements-pipeline.txt`: installed locally, so local and CI now match

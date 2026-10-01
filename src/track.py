@@ -1,26 +1,22 @@
-"""Log two MLflow runs to a local ./mlruns store: one for the baseline, one for
-the LightGBM model. DagsHub comes later; only the tracking URI changes then.
+"""Log two MLflow runs: one for the baseline, one for the LightGBM model.
+
+Where they go is decided by common.tracking_uri(), which reads MLFLOW_TRACKING_URI.
+With it unset that is the local ./mlruns store; pointed at DagsHub it is the remote
+server. Nothing else in this file decides, so the same command works in both places.
 
 Run after src/baseline.py and src/train.py have written reports/*.json.
 """
 
 import json
-import os
 from pathlib import Path
-
-# MLflow 3.x puts the ./mlruns file store in maintenance mode and refuses to write
-# unless this flag is set. The brief asks for a local ./mlruns store, so we opt in.
-# Migrating to sqlite:///mlflow.db is the documented long-term fix.
-os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
 
 import lightgbm as lgb
 import mlflow
 import mlflow.lightgbm
 import pandas as pd
 
-from common import MODEL_PATH, ROOT, load_raw, split_time
+from common import MODEL_PATH, ROOT, load_raw, split_time, tracking_uri
 
-TRACKING_DIR = ROOT / "mlruns"
 REPORTS = ROOT / "reports"
 
 
@@ -32,7 +28,16 @@ def log_metrics(metrics: dict[str, dict[str, float]]) -> None:
 
 
 def main() -> None:
-    mlflow.set_tracking_uri(TRACKING_DIR.as_uri())
+    uri = tracking_uri()
+    # MLflow 3.x puts the ./mlruns file store in maintenance mode and refuses to
+    # write unless this flag is set. It is harmless against a remote server, but
+    # it is only *needed* for the local store, so keep it off DagsHub.
+    if uri.startswith("file:"):
+        import os
+
+        os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+    mlflow.set_tracking_uri(uri)
+    print(f"tracking URI: {uri}")
     experiment = mlflow.set_experiment("energy-forecast-day-ahead")
 
     baseline = json.loads((REPORTS / "baseline_metrics.json").read_text())
@@ -70,7 +75,7 @@ def main() -> None:
         ).sort_values(ascending=False)
         importance.to_csv(REPORTS / "feature_importance.csv")
 
-    print(f"mlflow runs written to {TRACKING_DIR}")
+    print(f"mlflow runs written to {uri}")
     runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
     for _, row in runs.iterrows():
         print(f"  {row['tags.mlflow.runName']:10s} test_mae_mw={row['metrics.test_mae_mw']:,.1f}")
