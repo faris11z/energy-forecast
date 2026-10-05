@@ -43,3 +43,6 @@ reports/baseline_metrics.json
 # run added another, none of it reclaimable. The signal CI gates on is
 # reports/drift.json (4KB), which stays tracked.
 /reports/drift.html
+
+# Interactive architecture explorer
+interactive.html
