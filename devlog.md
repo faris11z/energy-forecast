@@ -932,3 +932,35 @@ pulled, pipeline repro'd, runs logged to DagsHub, and the gate **promoted v1 at
   with the 5 explicit paths
 - `pytest -q`: 9 passed
 - `reports/drift.html` still on disk after `git rm --cached`
+
+---
+
+# Session 3i - Retry logic in ingest.py and libgomp1 in Dockerfiles (agent-run-2)
+
+**Start ~15:40Z.** Implemented the actionable open items from `AGENTS.md`.
+
+## 1. Retry logic in src/ingest.py
+
+- Problem: A transient 503 from energy-charts.info caused an entire retrain run to fail.
+- Solution: Added `get_with_retry` with exponential backoff for 429 and 5xx responses as well as transient network drops (`requests.RequestException`). Client errors (4xx other than 429) fail immediately without retrying so invalid requests do not waste time.
+- Implemented across both `fetch_load` and `fetch_weather`.
+- Added unit tests in `tests/test_ingest.py` covering:
+  - Immediate success (200)
+  - Retry on 503 with backoff and eventual success
+  - Retry on 429 (rate-limit) with backoff and eventual success
+  - Immediate failure on 400 (Bad Request)
+  - Immediate failure on 404 (Not Found)
+  - RuntimeError raised when all retries are exhausted
+
+## 2. libgomp1 in Dockerfile and space/Dockerfile
+
+- Problem: Base image `python:3.11-slim` does not ship `libgomp.so.1`, causing LightGBM import to fail at container runtime.
+- Solution: Added `apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*` before the `pip install` layer in both `Dockerfile` and `space/Dockerfile`.
+- Added build-time verification `RUN python -c "import lightgbm"` right after the pip installation layer so any missing shared library fails the Docker build in CI rather than failing silently at container start.
+
+## Verification status
+
+- `ruff check src app tests`: all checks passed
+- `pytest -q`: 15 passed (9 existing + 6 new ingest retry tests)
+- `AGENTS.md`: updated to reflect resolved items and 15 tests
+

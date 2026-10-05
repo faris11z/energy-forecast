@@ -13,9 +13,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# LightGBM runtime requires libgomp.so.1, which is absent from python:3.11-slim.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
 # Dependency layer first so code edits do not invalidate the pip cache.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Verify lightgbm can resolve libgomp and import cleanly at build time.
+RUN python -c "import lightgbm"
 
 COPY src/ ./src/
 COPY app/ ./app/

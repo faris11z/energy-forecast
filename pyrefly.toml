@@ -1,0 +1,3 @@
+# Pyrefly configuration for Antigravity / Python language server
+search-path = ["src", "app"]
+python-interpreter-path = ".venv-win/Scripts/python.exe"

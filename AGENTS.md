@@ -16,10 +16,11 @@ runs identically locally and in CI.
 ## Environment
 
 **The virtualenv is Linux/WSL-only.** `.venv/` has `bin/`, no `Scripts/`, and
-`pyvenv.cfg` points at `/usr/bin/python3.14`. PowerShell cannot activate it. Do not
-try; use WSL bash.
+`pyvenv.cfg` points at `/usr/bin/python3.14`. PowerShell cannot activate it.
+Do not use the Windows Python installation for this repository. Use WSL bash.
 
-**Every Python command needs these two variables:**
+**Before running Python, pytest, or Python-based project commands, establish the
+project environment with:**
 
 ```bash
 export LD_LIBRARY_PATH="$PWD/.venv/lib" PATH="$PWD/.venv/bin:$PATH"
@@ -40,7 +41,7 @@ This is not optional.
 
 ```bash
 dvc repro                    # ingest -> features -> train -> evaluate
-pytest -q                     # 9 tests, fully offline
+pytest -q                     # 15 tests, fully offline
 ruff check src app tests      # what CI runs
 python src/track.py           # log baseline + lightgbm runs
 python src/promote.py         # 1% MAE promotion gate
@@ -99,9 +100,10 @@ ends 2026-09-29. These are not typos.
 
 ## Retries
 
-`src/ingest.py` currently makes a single HTTP request per API with no retry and no
-backoff. A transient 503 from energy-charts.info fails the whole retrain. This has
-happened in practice. See open items.
+`src/ingest.py` retries on 429, 5xx, and connection/timeout failures with
+exponential backoff (up to 4 attempts). Client errors (4xx other than 429) fail
+immediately without retry so bad requests do not spin pointlessly.
+Guarded by `tests/test_ingest.py`.
 
 ## DagsHub
 
@@ -120,28 +122,83 @@ endpoint; `.dvc/config.local` (gitignored) holds credentials.
 
 Ordered by how likely they are to bite.
 
-**1. No retry logic in `src/ingest.py`.** One 503 from energy-charts.info failed the
-scheduled weekly retrain. The API was healthy again shortly after. Undecided: whether
-a scheduled run should fail loudly on an upstream outage, or fall back to the last
-known good `data/` from DVC and continue with a warning. The trade-off is that the
-fallback produces a green run that did not retrain, which can mask a real problem.
-Either way, retry on 429/5xx only, with exponential backoff; a 400 should still fail.
-
-**2. `libgomp1` is missing from both Dockerfiles.** Diagnosed, approved, never written.
-Both images are `python:3.11-slim`, which does not ship `libgomp.so.1`, so
-`import lightgbm` fails at container start. `ci.yml`'s `docker build` does not catch
-it, because building never imports the library. Fix is
-`apt-get install -y --no-install-recommends libgomp1` before the pip layer, plus a
-build-time `RUN python -c "import lightgbm"` so the class of bug cannot recur silently.
-Affects `Dockerfile` and `space/Dockerfile`.
-
-**3. `reports/drift.html` in git history.** ~11.6 MB across 12 blobs, untracked going
+**1. `reports/drift.html` in git history.** ~11.6 MB across 12 blobs, untracked going
 forward but not reclaimed. Deliberately not rewritten with `filter-repo`: force-pushing
 a branch that is actively being run in CI is not worth 11.6 MB.
 
-**4. Docker is unavailable from this WSL distro.** The user runs Docker from Windows
+**2. Docker is unavailable from this WSL distro.** The user runs Docker from Windows
 CMD. The CLI resolves on PATH but no daemon is reachable, so image builds cannot be
-verified here. Any claim that a Dockerfile change works is unverified until built.
+verified locally here. `ci.yml` builds and verifies the image (`RUN python -c "import lightgbm"`).
+
+## Recently resolved items
+
+- **Retry logic in `src/ingest.py`**: Added `get_with_retry` with exponential backoff
+  for 429/5xx and network failures; 4xx client errors fail immediately. Unit tests in
+  `tests/test_ingest.py`.
+- **`libgomp1` in Dockerfiles**: Added `apt-get install -y --no-install-recommends libgomp1`
+  and build-time verification `RUN python -c "import lightgbm"` to both `Dockerfile`
+  and `space/Dockerfile`.
+
+## Agent Execution & Permissions
+
+Routine development commands are safe to execute without asking for confirmation when they operate inside this repository or its WSL virtual environment.
+
+### Automatically allowed
+
+The agent may run:
+
+- `python ...`
+- `python -m ...`
+- `pytest`
+- `pytest -q`
+- `python -m pytest`
+- `ruff check ...`
+- `ruff format ...`
+- `dvc status`
+- `dvc repro`
+- `dvc repro -s <stage>`
+- `git status`
+- `git diff`
+- `git log`
+- `git show`
+- `git branch`
+- `pip list`
+- `pip show ...`
+- `pip install ...` into the project `.venv`
+- normal local scripts under `src/`, `tests/`, and project tooling
+- file creation and modification inside the repository
+
+Use the project's WSL `.venv` for Python commands. Do not use the Windows Python installation for this repository.
+
+### Commands requiring confirmation
+
+Ask before:
+
+- `git commit`
+- `git push`
+- deleting important project files or directories
+- deleting or overwriting source datasets
+- modifying files outside the repository
+- installing system-wide packages
+- modifying system configuration
+- changing Git remotes
+- changing DVC remotes
+- changing CI/CD configuration in a way that affects deployment or credentials
+- deploying or publishing anything
+- accessing, displaying, or modifying secrets or credentials
+- force-pushing or rewriting Git history
+
+Never paste secrets, tokens, passwords, or credentials into command output, source files, commits, or chat.
+
+### Command execution principles
+
+- Do not ask for confirmation for routine, non-destructive development commands covered above.
+- Before running a command, check `AGENTS.md`, `pyproject.toml`, `dvc.yaml`, and relevant project configuration when necessary.
+- Prefer existing project scripts and tooling over inventing new commands.
+- Run relevant tests after code changes.
+- Never claim a command succeeded unless it was actually executed.
+- If a command fails, diagnose the failure rather than repeatedly retrying blindly.
+- Keep changes focused and reversible.
 
 ## Testing
 

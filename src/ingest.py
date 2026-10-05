@@ -10,6 +10,7 @@ Everything is indexed by UTC. Re-run this script to refresh the dataset.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -35,11 +36,50 @@ LOAD_SERIES = "Load (incl. self-consumption)"
 RAW = Path(__file__).resolve().parents[1] / "data" / "raw" / "load_weather.csv"
 
 
+def get_with_retry(
+    url: str,
+    params: dict,
+    max_retries: int = 4,
+    backoff_factor: float = 2.0,
+    timeout: int = 120,
+) -> requests.Response:
+    """GET with exponential backoff on 429, 5xx, or network errors.
+
+    4xx client errors (excluding 429) fail immediately without retry.
+    """
+    last_error: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params, timeout=timeout)
+            if response.status_code == 429 or response.status_code >= 500:
+                response.raise_for_status()
+            if 400 <= response.status_code < 500:
+                response.raise_for_status()
+            return response
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else 0
+            if status != 429 and 400 <= status < 500:
+                raise
+            last_error = error
+        except requests.RequestException as error:
+            last_error = error
+
+        sleep_time = backoff_factor * (2**attempt)
+        print(
+            f"GET {url} failed ({last_error}), retrying in {sleep_time:.1f}s "
+            f"(attempt {attempt + 1}/{max_retries})..."
+        )
+        time.sleep(sleep_time)
+
+    raise RuntimeError(
+        f"Request to {url} failed after {max_retries} attempts: {last_error}"
+    ) from last_error
+
+
 def fetch_load(start: str, end: str) -> pd.Series:
     """Hourly gross load in MW, indexed by UTC."""
     params = {"bzn": "DE-LU", "start": start, "end": end}
-    response = requests.get(LOAD_URL, params=params, timeout=120)
-    response.raise_for_status()
+    response = get_with_retry(LOAD_URL, params=params, timeout=120)
     payload = response.json()
 
     wanted = None
@@ -67,8 +107,7 @@ def fetch_weather(start: str, end: str) -> pd.DataFrame:
         "hourly": "temperature_2m,wind_speed_10m,shortwave_radiation",
         "timezone": "UTC",
     }
-    response = requests.get(WEATHER_URL, params=params, timeout=120)
-    response.raise_for_status()
+    response = get_with_retry(WEATHER_URL, params=params, timeout=120)
     payload = response.json()
 
     # Multiple coordinates come back as a list of per-city responses.
