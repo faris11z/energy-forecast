@@ -5,6 +5,6 @@ lightgbm>=4.3,<5
 holidays>=0.45,<1
 requests>=2.31,<3
 pyyaml>=6.0
-gradio>=4.40.0
+gradio>=4.44.0,<5.0.0
+huggingface_hub>=0.23.0,<0.25.0
 plotly>=5.20.0
-
