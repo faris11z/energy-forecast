@@ -46,8 +46,8 @@ jobs:
       - name: Assemble the Space payload
         run: |
           mkdir -p deploy
-          cp -r src app requirements.txt params.yaml deploy/
-          cp space/Dockerfile space/README.md deploy/
+          cp -r src params.yaml deploy/
+          cp space/app.py space/README.md space/requirements.txt space/packages.txt deploy/
           mkdir -p deploy/data/raw deploy/models
           cp data/raw/load_weather.csv deploy/data/raw/
           cp models/lgbm_load.txt deploy/models/
@@ -64,5 +64,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
           git add -A
-          git commit -q -m "Deploy energy-forecast API"
-          git push "https://user:$HF_TOKEN@huggingface.co/spaces/$SPACE" HEAD:main
+          git commit -q -m "Deploy energy-forecast Gradio app"
+          git push -f "https://user:$HF_TOKEN@huggingface.co/spaces/$SPACE" HEAD:main
