@@ -18,7 +18,7 @@ from pathlib import Path
 import lightgbm as lgb
 import pandas as pd
 import requests
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -160,18 +160,28 @@ def forecast(hours: int = HOURS, now: datetime | None = None):
         value = float(MODEL.predict(row[features.columns])[0])
         # Feed the prediction back so the next step's lags are defined.
         frame.loc[step_time, TARGET] = value
-        predictions.append(
-            {
-                "time_utc": step_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "load_mw": round(value, 1),
-            }
-        )
+        pred = {
+            "time_utc": step_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "load_mw": round(value, 1),
+        }
+        if "temperature_2m" in row.columns:
+            pred["temperature_2m"] = round(float(row["temperature_2m"].iloc[0]), 1)
+        if "wind_speed_10m" in row.columns:
+            pred["wind_speed_10m"] = round(float(row["wind_speed_10m"].iloc[0]), 1)
+        if "shortwave_radiation" in row.columns:
+            pred["shortwave_radiation"] = round(float(row["shortwave_radiation"].iloc[0]), 1)
+        predictions.append(pred)
     return predictions, pd.concat(rows)
 
 
 def predict_next(hours: int = HOURS, now: datetime | None = None) -> list[dict]:
     """The next `hours` load values only."""
     return forecast(hours=hours, now=now)[0]
+
+
+@app.get("/")
+def index():
+    return render_template("index.html")
 
 
 @app.get("/health")
