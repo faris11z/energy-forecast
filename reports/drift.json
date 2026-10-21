@@ -2,50 +2,51 @@
   "drift_detected": false,
   "distribution_drift": true,
   "accuracy_drift": false,
-  "drifted_column_share": 0.5,
+  "drifted_column_share": 0.75,
   "threshold": 0.25,
   "seasonally_matched": true,
   "drifted_columns": [
     "temperature_2m",
+    "wind_speed_10m",
     "load_mw"
   ],
   "columns": {
     "temperature_2m": {
-      "ks_statistic": 0.1847222222222223,
-      "p_value": 3.778080585962396e-11,
+      "ks_statistic": 0.24305555555555558,
+      "p_value": 4.522003810388706e-19,
       "drifted": true
     },
     "wind_speed_10m": {
-      "ks_statistic": 0.06944444444444445,
-      "p_value": 0.06207051616625255,
-      "drifted": false
+      "ks_statistic": 0.2402777777777778,
+      "p_value": 1.2114667780990938e-18,
+      "drifted": true
     },
     "shortwave_radiation": {
-      "ks_statistic": 0.06527777777777777,
-      "p_value": 0.09300938611612808,
+      "ks_statistic": 0.06388888888888888,
+      "p_value": 0.1058380786474993,
       "drifted": false
     },
     "load_mw": {
-      "ks_statistic": 0.09444444444444447,
-      "p_value": 0.0032335363027500234,
+      "ks_statistic": 0.10972222222222225,
+      "p_value": 0.00034007924690157635,
       "drifted": true
     }
   },
   "reference_window_utc": [
-    "2025-08-30T22:00:00Z",
-    "2025-09-29T21:00:00Z"
+    "2025-09-06T22:00:00Z",
+    "2025-10-06T21:00:00Z"
   ],
   "current_window_utc": [
-    "2026-08-30T22:00:00Z",
-    "2026-09-29T21:00:00Z"
+    "2026-09-06T22:00:00Z",
+    "2026-10-06T21:00:00Z"
   ],
   "reference_rows": 720,
   "current_rows": 720,
   "prediction_error": {
     "available": true,
-    "recent_mae_mw": 1445.69,
-    "train_test_mae_mw": 1438.54,
-    "degradation_pct": 0.5,
+    "recent_mae_mw": 1453.71,
+    "train_test_mae_mw": 1499.19,
+    "degradation_pct": -3.03,
     "accuracy_degraded": false,
     "window_days": 30
   }

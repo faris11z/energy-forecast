@@ -15,14 +15,14 @@ stages:
       isexec: true
     - path: src/ingest.py
       hash: md5
-      md5: d60c0cb863b2ed6f0258cf9c3a821f6f
-      size: 4228
+      md5: 106fce7cd738f7712bb5337bd73b22d9
+      size: 5566
       isexec: true
     outs:
     - path: data/raw/load_weather.csv
       hash: md5
-      md5: 224b69bb115b624b4852c392951e8b0a
-      size: 1317256
+      md5: 678b56053c4183ac24d9db1ee8d45567
+      size: 1317217
       isexec: true
   features:
     cmd: python src/features.py
@@ -45,8 +45,8 @@ stages:
     outs:
     - path: data/processed/features.csv
       hash: md5
-      md5: 8d1c3d705c4e9d3a1eeb872f395888ee
-      size: 2006437
+      md5: f55d9c76bc81c85369fe9235c08a0789
+      size: 2006549
       isexec: true
   train:
     cmd: python src/train.py
@@ -74,12 +74,12 @@ stages:
     outs:
     - path: models/lgbm_load.txt
       hash: md5
-      md5: ede08daa38098693076913cd94f2a939
-      size: 286459
+      md5: 2c607abd0ea0f0afba815aea97a166e2
+      size: 286458
       isexec: true
     - path: reports/train_metrics.json
       hash: md5
-      md5: 97b2c8e8044aac19f3775647da671039
+      md5: c8193e1af60868184a6107ed9d3cbae1
       size: 878
       isexec: true
   evaluate:
@@ -108,11 +108,11 @@ stages:
     outs:
     - path: metrics.json
       hash: md5
-      md5: a1dd35218680c234b6af511a9c6b1e0d
-      size: 1948
+      md5: b21cb8ceafb171df553adeee8e40f2bc
+      size: 1944
       isexec: true
     - path: reports/baseline_metrics.json
       hash: md5
-      md5: a558c9862e87bf6865b09335a84d85c4
-      size: 361
+      md5: 30a263c2d7db7e9c2881cae733e8e771
+      size: 358
       isexec: true
