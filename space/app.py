@@ -13,6 +13,24 @@ try:
 except ImportError:
     UTC = timezone.utc
 
+# Backward compatibility shim for Hugging Face Hub HfFolder removal
+try:
+    import huggingface_hub
+
+    if not hasattr(huggingface_hub, "HfFolder"):
+        class HfFolder:
+            @staticmethod
+            def get_token():
+                try:
+                    from huggingface_hub import get_token
+                    return get_token()
+                except (ImportError, AttributeError):
+                    return None
+
+        huggingface_hub.HfFolder = HfFolder
+except (ImportError, AttributeError):
+    pass
+
 import gradio as gr
 import lightgbm as lgb
 import pandas as pd
