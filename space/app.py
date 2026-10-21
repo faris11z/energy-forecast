@@ -31,6 +31,17 @@ try:
 except (ImportError, AttributeError):
     pass
 
+# ZeroGPU compatibility for Hugging Face Spaces
+try:
+    import spaces
+except ImportError:
+    class spaces:
+        @staticmethod
+        def GPU(fn=None, duration=None):
+            if fn is None:
+                return lambda f: f
+            return fn
+
 import gradio as gr
 import lightgbm as lgb
 import pandas as pd
@@ -97,6 +108,7 @@ def fetch_forecast_weather(start: datetime, hours: int) -> pd.DataFrame:
     return pd.concat(frames).groupby(level=0).mean()
 
 
+@spaces.GPU
 def run_forecast():
     """Execute the recursive 24-hour day-ahead forecast and return UI components."""
     if MODEL is None:
@@ -229,7 +241,6 @@ def run_forecast():
 # Gradio UI definition
 with gr.Blocks(
     title="German Grid Day-Ahead Energy Forecaster",
-    theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate"),
 ) as demo:
     gr.Markdown(
         """
@@ -290,4 +301,8 @@ with gr.Blocks(
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", "7860")))
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=int(os.environ.get("PORT", "7860")),
+        theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate"),
+    )
