@@ -85,6 +85,7 @@ def decide(new_mae: float, old_mae: float | None) -> tuple[bool, str]:
 
 def main() -> None:
     mlflow.set_tracking_uri(tracking_uri())
+    mlflow.set_experiment("energy-forecast-day-ahead")
     metrics = json.loads((REPORTS / "train_metrics.json").read_text())
     new_mae = float(metrics["results"]["test"]["mae_mw"])
 

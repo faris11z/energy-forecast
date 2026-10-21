@@ -45,9 +45,9 @@ jobs:
 
       - name: Assemble the Space payload
         run: |
-          mkdir -p deploy/space
+          mkdir -p deploy
           cp -r src app requirements.txt params.yaml deploy/
-          cp space/Dockerfile space/README.md deploy/space/
+          cp space/Dockerfile space/README.md deploy/
           mkdir -p deploy/data/raw deploy/models
           cp data/raw/load_weather.csv deploy/data/raw/
           cp models/lgbm_load.txt deploy/models/
