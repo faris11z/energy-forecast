@@ -12,7 +12,7 @@ would leave those lags empty.
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import lightgbm as lgb
@@ -121,7 +121,7 @@ def next_24_features(hours: int = HOURS, now: datetime | None = None) -> pd.Data
 
     Exposed separately so it can be unit tested for NaNs without going over HTTP.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     # The next full hour boundary: we forecast complete hours, not partial ones.
     start = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
 
@@ -191,7 +191,7 @@ def health():
             "status": "ok",
             "model_loaded": MODEL is not None,
             "model_source": MODEL_SOURCE,
-            "utc_now": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "utc_now": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     ), 200
 

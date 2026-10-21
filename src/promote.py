@@ -10,7 +10,7 @@ same code runs against the local ./mlruns store and against DagsHub later.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import lightgbm as lgb
 import mlflow
@@ -93,7 +93,7 @@ def main() -> None:
     promoted, reason = decide(new_mae, old_mae)
 
     result = {
-        "checked_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "checked_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "new_model_mae_mw": new_mae,
         "production_mae_mw": old_mae,
         "production_version": old_version,

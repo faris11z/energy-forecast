@@ -5,7 +5,7 @@ Runs on Hugging Face Spaces with 100% free Gradio SDK (no Docker required).
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import gradio as gr
@@ -79,7 +79,7 @@ def run_forecast():
     if MODEL is None:
         raise gr.Error("Trained LightGBM model not found on disk.")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
 
     # Load history
