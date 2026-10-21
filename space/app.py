@@ -5,8 +5,13 @@ Runs on Hugging Face Spaces with 100% free Gradio SDK (no Docker required).
 
 import os
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+try:
+    from datetime import UTC
+except ImportError:
+    UTC = timezone.utc
 
 import gradio as gr
 import lightgbm as lgb
